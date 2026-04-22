@@ -1,0 +1,25 @@
+{
+  "name": "snapshot-table-updater",
+  "description": "基于 @ai_doc 的库表扫描和更新功能，实现业务发现、表关联解析和配置文件自动更新",
+  "triggers": [
+    "库表更新",
+    "table scan",
+    "snapshot table update",
+    "库表扫描",
+    "业务表更新",
+    "ai_doc扫描",
+    "table relations",
+    "businesses-tables",
+    "表关联更新"
+  ],
+  "category": "configuration",
+  "requires": [
+    "businesses-tables.json",
+    "ai-index files",
+    "table-relations.json",
+    "source repository access"
+  ],
+  "version": "1.0.0",
+  "author": "System",
+  "tags": ["database", "scanning", "configuration", "automation"]
+}

@@ -1,0 +1,29 @@
+{
+  "name": "snapshot-collector",
+  "description": "测试用例快照采集器：闭环采集数据库数据，支持业务场景数据收集、CLI/MCP查询、校验保存和补采重试机制",
+  "triggers": [
+    "快照采集",
+    "snapshot collect",
+    "采集初始数据",
+    "采集结果数据",
+    "用例集",
+    "业务快照",
+    "数据快照",
+    "测试快照",
+    "snapshot collector",
+    "collect data",
+    "collect snapshot",
+    "test case data",
+    "before snapshot",
+    "after snapshot"
+  ],
+  "category": "testing",
+  "requires": {
+    "config": ".observatory/snapshots/config/businesses-tables.json",
+    "tools": ["jq"],
+    "optional_dependencies": []
+  },
+  "author": "AI Assistant",
+  "version": "1.0.0",
+  "tags": ["testing", "database", "snapshot", "data-collection"]
+}

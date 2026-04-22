@@ -1,0 +1,95 @@
+{
+  "schema_version": "1.0.0",
+  "generated_at": "2026-04-15T05:56:36.776Z",
+  "source_files": [
+    "migrations/000001_init_schema.down.sql",
+    "migrations/000001_init_schema.up.sql"
+  ],
+  "tables": [
+    {
+      "name": "users",
+      "schema": "public",
+      "columns": [],
+      "indexes": [],
+      "foreign_keys": []
+    },
+    {
+      "name": "api_keys",
+      "schema": "public",
+      "columns": [],
+      "indexes": [],
+      "foreign_keys": []
+    },
+    {
+      "name": "models",
+      "schema": "public",
+      "columns": [],
+      "indexes": [],
+      "foreign_keys": []
+    },
+    {
+      "name": "upstreams",
+      "schema": "public",
+      "columns": [],
+      "indexes": [],
+      "foreign_keys": []
+    },
+    {
+      "name": "token_groups",
+      "schema": "public",
+      "columns": [],
+      "indexes": [],
+      "foreign_keys": []
+    },
+    {
+      "name": "token_group_upstreams",
+      "schema": "public",
+      "columns": [],
+      "indexes": [],
+      "foreign_keys": []
+    },
+    {
+      "name": "user_balances",
+      "schema": "public",
+      "columns": [],
+      "indexes": [],
+      "foreign_keys": []
+    },
+    {
+      "name": "balance_logs",
+      "schema": "public",
+      "columns": [],
+      "indexes": [],
+      "foreign_keys": []
+    },
+    {
+      "name": "redeem_codes",
+      "schema": "public",
+      "columns": [],
+      "indexes": [],
+      "foreign_keys": []
+    },
+    {
+      "name": "usage_logs",
+      "schema": "public",
+      "columns": [],
+      "indexes": [],
+      "foreign_keys": []
+    },
+    {
+      "name": "audit_logs",
+      "schema": "public",
+      "columns": [],
+      "indexes": [],
+      "foreign_keys": []
+    },
+    {
+      "name": "rate_limit_rules",
+      "schema": "public",
+      "columns": [],
+      "indexes": [],
+      "foreign_keys": []
+    }
+  ],
+  "relationships": []
+}

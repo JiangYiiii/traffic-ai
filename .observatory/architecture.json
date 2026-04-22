@@ -1,0 +1,31 @@
+{
+  "schema_version": "1.0.0",
+  "generated_at": "2026-04-22T06:45:56.127Z",
+  "modules": [
+    {
+      "id": "scripts",
+      "name": "scripts",
+      "path": "scripts/",
+      "type": "package",
+      "language": "python",
+      "files": [
+        {
+          "path": "scripts/openclaw-sync-traffic-models.py",
+          "lines": 486,
+          "functions": 13,
+          "classes": 0
+        }
+      ],
+      "imports_from": [],
+      "imported_by": [],
+      "capability_ids": [],
+      "stats": {
+        "total_lines": 486,
+        "total_functions": 13,
+        "total_classes": 0
+      }
+    }
+  ],
+  "edges": [],
+  "layers": []
+}

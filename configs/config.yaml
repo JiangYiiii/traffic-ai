@@ -1,0 +1,75 @@
+server:
+  control_port: 8080
+  admin_control_port: 8083
+  gateway_port: 8081
+  mode: debug  # debug | release
+
+database:
+  host: 127.0.0.1
+  port: 3306
+  user: root
+  password: ""
+  name: traffic_ai
+  max_open_conns: 50
+  max_idle_conns: 10
+  conn_max_lifetime: 3600
+
+redis:
+  addr: 127.0.0.1:6379
+  password: ""
+  db: 0
+  pool_size: 20
+
+jwt:
+  secret: "traffic-ai-dev-jwt-secret-change-in-prod"
+  access_ttl: 7200       # 2 hours
+  refresh_ttl: 604800     # 7 days
+
+crypto:
+  aes_key: "traffic-ai-dev-aes256-key!!"  # 32 bytes for AES-256
+
+email:
+  smtp_host: ""
+  smtp_port: 587
+  username: ""
+  password: ""
+  from: "noreply@4tk.ai"
+
+log:
+  level: debug   # debug | info | warn | error
+  format: json   # json | text
+  output: stdout # stdout | file
+  file_path: ""
+
+oauth:
+  public_base_url: "http://127.0.0.1:8083"  # 回调地址前缀，部署时改为实际域名
+  providers:
+    openai:
+      client_id: ""
+      client_secret: ""
+      authorization_endpoint: "https://auth.openai.com/authorize"
+      token_endpoint: "https://auth.openai.com/token"
+      scopes: "openid profile"
+
+gateway:
+  upstream:
+    enabled: true
+    max_idle_conns: 256
+    max_idle_conns_per_host: 64
+    max_conns_per_host: 128
+    idle_conn_timeout_sec: 90
+    dial_timeout_sec: 5
+    tls_handshake_timeout_sec: 10
+    response_header_timeout_sec: 30
+    stream_idle_timeout_sec: 60
+  circuit:
+    enabled: true
+    error_rate_threshold: 0.5
+    min_request_count: 20
+    window_sec: 60
+    cooldown_base_ms: 5000
+    cooldown_max_ms: 60000
+    success_threshold_to_close: 3
+    half_open_probe_rate: 0.3
+    key_ttl_sec: 600
+    max_attempts: 3

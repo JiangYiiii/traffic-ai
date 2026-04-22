@@ -1,0 +1,506 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <link rel="manifest" href="site.webmanifest" />
+    <meta name="theme-color" content="#2563eb" />
+    <meta name="traffic-ai-admin-port" content="8083" />
+    <title data-i18n="brand.name">Traffic AI 控制台</title>
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+      crossorigin="anonymous"
+    />
+    <link rel="stylesheet" href="css/bootstrap-bridge.css" />
+    <link rel="stylesheet" href="styles.css" />
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css"
+      crossorigin="anonymous"
+    />
+  </head>
+  <body>
+    <nav class="navbar navbar-expand-lg navbar-light bg-white border-bottom shadow-sm site-navbar">
+      <div class="app-shell app-shell--navbar">
+        <div class="flex-grow-1 min-w-0 me-lg-3">
+          <span class="navbar-brand mb-0" data-i18n="brand.name">Traffic AI 控制台</span>
+        </div>
+        <button
+          class="navbar-toggler py-2"
+          type="button"
+          data-bs-toggle="collapse"
+          data-bs-target="#appNavbar"
+          aria-controls="appNavbar"
+          aria-expanded="false"
+          aria-label="Menu"
+        >
+          <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="appNavbar">
+          <div class="d-flex flex-wrap gap-2 ms-lg-auto align-items-center site-nav-actions py-3 py-lg-0">
+            <select data-lang-switch class="form-select form-select-sm site-lang-select" aria-label="Language">
+              <option value="zh">中文</option>
+              <option value="en">English</option>
+            </select>
+            <a class="btn btn-outline-secondary btn-sm" href="/docs" data-i18n="nav.docsApi">接入文档</a>
+            <button type="button" id="refreshBtn" class="btn btn-outline-secondary btn-sm" data-i18n="nav.refresh">刷新数据</button>
+            <a
+              id="adminLinkBtn"
+              class="btn btn-outline-secondary btn-sm"
+              style="display: none"
+              href="/admin.html"
+              data-i18n="nav.admin"
+              >管理员后台</a
+            >
+            <a
+              id="superAdminLinkBtn"
+              class="btn btn-outline-secondary btn-sm"
+              style="display: none"
+              href="/super-admin.html"
+              data-i18n="nav.superAdmin"
+              >超级管理员后台</a
+            >
+            <button type="button" id="logoutBtn" class="btn btn-dark btn-sm" data-i18n="nav.logout">退出登录</button>
+          </div>
+        </div>
+      </div>
+    </nav>
+
+    <main class="app-main py-4">
+      <div class="app-shell app-dashboard">
+        <section class="card console-hero mb-4" id="overviewSection">
+          <div class="console-hero-content">
+            <div class="console-hero-copy">
+              <p class="console-hero-eyebrow" data-i18n="app.overviewEyebrow">工作台</p>
+              <h1 class="console-hero-title" data-i18n="app.overviewTitle">统一管理令牌、余额和模型调用</h1>
+              <p class="console-hero-desc" data-i18n="app.overviewDesc">
+                从一个页面完成充值、令牌创建、余额提醒、模型测试和消费追踪。
+              </p>
+              <div class="console-hero-meta">
+                <span class="console-chip" id="heroEmail">-</span>
+                <span class="console-chip" id="heroGroup">-</span>
+                <span class="console-chip" id="heroInviteCode">-</span>
+              </div>
+            </div>
+            <div class="console-hero-links">
+              <a class="ghost console-hero-link" href="#redeemSection" data-i18n="app.jumpRecharge">快速充值</a>
+              <a class="ghost console-hero-link" href="#tokenSection" data-i18n="app.jumpTokens">管理令牌</a>
+              <a class="ghost console-hero-link" href="#usageSection" data-i18n="app.jumpUsage">查看日志</a>
+              <a class="ghost console-hero-link" href="#pricingSection" data-i18n="app.jumpPricing">查看模型</a>
+            </div>
+          </div>
+        </section>
+
+        <!-- KPI：Grid 四列（中屏 2×2、窄屏单列），与主区同宽 -->
+        <div class="app-kpi-grid console-kpi-grid mb-4">
+          <div class="card h-100 kpi-card kpi-card--balance">
+            <div class="kpi-card-body">
+              <div class="kpi-title" data-i18n="app.balance">账户余额</div>
+              <div class="kpi" id="kpiBalance">-</div>
+            </div>
+          </div>
+          <div class="card h-100 kpi-card kpi-card--consumed">
+            <div class="kpi-card-body">
+              <div class="kpi-title" data-i18n="app.consumed">累计消费</div>
+              <div class="kpi" id="kpiConsumed">-</div>
+            </div>
+          </div>
+          <div class="card h-100 kpi-card kpi-card--calls">
+            <div class="kpi-card-body">
+              <div class="kpi-title" data-i18n="app.calls">调用次数</div>
+              <div class="kpi" id="kpiCalls">-</div>
+            </div>
+          </div>
+          <div class="card h-100 kpi-card kpi-card--tokens">
+            <div class="kpi-card-body">
+              <div class="kpi-title" data-i18n="app.tokens">活跃令牌</div>
+              <div class="kpi" id="kpiTokens">-</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="console-utility-grid mb-4">
+          <section class="card console-balance-card" id="balanceAlertSection">
+            <div class="console-section-head">
+              <div class="console-section-copy">
+                <h3 class="mb-0" data-i18n="app.balanceAlertTitle">余额邮件提醒</h3>
+                <p class="console-section-desc" data-i18n="app.balanceAlertHint">
+                  当账户余额低于下方金额时，向您的注册邮箱发送一封提醒（每个「低于阈值」周期至多一封；充值回到阈值以上后会再次提醒）。
+                </p>
+              </div>
+              <span class="console-inline-tip console-inline-tip--status" id="balanceAlertSummaryText">—</span>
+            </div>
+            <div class="console-form-panel console-form-panel--plain">
+              <form id="balanceAlertForm" class="row g-2 g-sm-3 align-items-end balance-alert-form">
+                <div class="col-12 col-sm-auto">
+                  <label class="balance-alert-toggle mb-0" for="balanceAlertEnabled">
+                    <input type="checkbox" id="balanceAlertEnabled" checked />
+                    <span data-i18n="app.balanceAlertEnable">启用余额提醒</span>
+                  </label>
+                </div>
+                <div class="col-6 col-sm-4 col-md-3">
+                  <label for="balanceAlertUsd" class="small" data-i18n="app.balanceAlertUsdLabel">提醒阈值（USD）</label>
+                  <input id="balanceAlertUsd" type="number" min="0.01" step="0.01" value="10" required />
+                </div>
+                <div class="col-6 col-sm-auto">
+                  <button type="submit" class="balance-alert-save-btn" data-i18n="app.balanceAlertSave">保存设置</button>
+                </div>
+                <div class="col-12">
+                  <div id="balanceAlertMsg" class="msg balance-alert-msg mb-0"></div>
+                </div>
+              </form>
+            </div>
+          </section>
+
+          <section class="card console-action-card" id="redeemSection">
+            <div class="console-section-head console-section-head--compact">
+              <div class="console-section-copy">
+                <h3 data-i18n="app.redeem">兑换码充值</h3>
+                <p class="console-section-desc" data-i18n="app.redeemDesc">
+                  使用兑换码即时充值，结果会同步写入余额流水。
+                </p>
+              </div>
+            </div>
+            <form id="redeemForm" class="grid console-simple-form">
+              <div>
+                <label for="redeemCode" data-i18n="app.codeLabel">兑换码</label>
+                <input
+                  id="redeemCode"
+                  type="text"
+                  data-i18n-placeholder="app.codePlaceholder"
+                  placeholder="例如：RC-XXXXXXXXXXXXXXX"
+                  required
+                />
+              </div>
+              <button type="submit" data-i18n="app.redeemNow">立即兑换</button>
+              <div id="redeemMsg" class="msg"></div>
+            </form>
+          </section>
+        </div>
+
+        <div class="console-data-grid console-data-grid--token-pricing mb-4">
+          <section class="card console-section console-token-section" id="tokenSection">
+            <div class="console-section-head console-section-head--compact">
+              <div class="console-section-copy">
+                <h3 class="mb-0" data-i18n="app.tokenList">令牌列表</h3>
+                <p class="console-section-desc" data-i18n="app.tokenSectionDesc">
+                  按环境与分组创建子令牌，复制后即可在客户端、脚本或 IDE 中使用。
+                </p>
+              </div>
+              <div class="console-section-actions">
+                <button type="button" id="openCreateTokenBtn" class="ghost console-add-btn" data-i18n="app.addToken">
+                  添加令牌
+                </button>
+              </div>
+            </div>
+            <div class="console-token-note" data-i18n="app.tokenSectionHint">
+              请保管好您的令牌，避免泄露给任何人。
+            </div>
+            <div class="table-responsive site-table-scroll console-table-shell">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th data-i18n="table.name">名称</th>
+                    <th data-i18n="table.group">分组</th>
+                    <th data-i18n="app.tokenPlainColumn">令牌</th>
+                    <th data-i18n="table.status">状态</th>
+                    <th data-i18n="table.lastUsed">最后使用</th>
+                    <th data-i18n="table.action">操作</th>
+                  </tr>
+                </thead>
+                <tbody id="tokenTable"></tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="card console-section console-pricing-section" id="pricingSection">
+            <div class="console-section-head console-section-head--compact">
+              <div class="console-section-copy">
+                <h3 class="mb-0" data-i18n="app.pricing">模型定价</h3>
+                <p class="console-section-desc" data-i18n="app.pricingDesc">
+                  复制模型名并核对当前单价；按 token 模型展示输入/输出单价，按次模型展示单次价格。
+                </p>
+              </div>
+            </div>
+            <div class="table-responsive site-table-scroll console-table-shell">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th data-i18n="table.model">模型</th>
+                    <th data-i18n="app.pricingColPrice">价格</th>
+                  </tr>
+                </thead>
+                <tbody id="pricingTable"></tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+
+        <section class="card console-section mb-4" id="usageSection">
+          <div class="console-section-head">
+            <div class="console-section-copy">
+              <h3 class="mb-0" data-i18n="app.logList">调用日志</h3>
+              <p class="console-section-desc" data-i18n="app.logSectionDesc">
+                筛选最近调用，快速定位模型、推理强度、分组、流式状态和耗时。
+              </p>
+            </div>
+          </div>
+          <div class="console-form-panel console-form-panel--toolbar">
+            <div class="usage-log-toolbar">
+              <select id="filterStream">
+                <option value="" data-i18n="app.streamAll">流式：全部</option>
+                <option value="true" data-i18n="app.streamTrue">流式</option>
+                <option value="false" data-i18n="app.streamFalse">非流式</option>
+              </select>
+              <input id="filterModel" type="text" data-i18n-placeholder="app.modelPlaceholder" placeholder="筛选模型，如 gpt-4o-mini" />
+              <label class="usage-toolbar-label" for="filterStart" data-i18n="app.filterStart">开始</label>
+              <input id="filterStart" type="datetime-local" data-i18n-title="app.filterStartTitle" title="开始时间" />
+              <label class="usage-toolbar-label" for="filterEnd" data-i18n="app.filterEnd">结束</label>
+              <input id="filterEnd" type="datetime-local" data-i18n-title="app.filterEndTitle" title="结束时间" />
+              <button type="button" id="filterBtn" data-i18n="app.filterLog">筛选日志</button>
+              <button type="button" id="filterResetBtn" class="ghost" data-i18n="app.filterReset">重置</button>
+            </div>
+          </div>
+          <div class="table-responsive site-table-scroll console-table-shell">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th data-i18n="table.time">时间</th>
+                  <th data-i18n="table.type">类型</th>
+                  <th data-i18n="table.token">令牌</th>
+                  <th data-i18n="table.group">分组</th>
+                  <th data-i18n="table.model">模型</th>
+                  <th data-i18n="table.reasoningEffort">推理强度</th>
+                  <th data-i18n="table.latency">耗时</th>
+                  <th data-i18n="table.stream">流式</th>
+                  <th data-i18n="table.prompt">提示</th>
+                  <th data-i18n="table.completion">补全</th>
+                  <th data-i18n="table.totalTokens">Token 总量</th>
+                  <th data-i18n="table.cacheCreation">缓存创建</th>
+                  <th data-i18n="table.cacheRead">缓存读取</th>
+                  <th data-i18n="table.cost">消费（USD）</th>
+                  <th data-i18n="table.ip">IP</th>
+                  <th class="usage-note-column" data-i18n="table.note">说明</th>
+                </tr>
+              </thead>
+              <tbody id="usageTable"></tbody>
+            </table>
+          </div>
+          <div class="pagination-bar" id="usagePager">
+            <span class="pagination-info" id="usagePageInfo"></span>
+            <div class="pagination-actions">
+              <button type="button" id="usagePrevBtn" class="ghost" data-i18n="app.prevPage" disabled>上一页</button>
+              <button type="button" id="usageNextBtn" class="ghost" data-i18n="app.nextPage" disabled>下一页</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="card console-section mb-4" id="balanceSection">
+          <div class="console-section-head">
+            <div class="console-section-copy">
+              <h3 class="mb-0" data-i18n="app.balanceLogs">余额流水</h3>
+              <p class="console-section-desc" data-i18n="app.balanceLogDesc">
+                查看充值、扣费和余额变化，便于核对账务。
+              </p>
+            </div>
+          </div>
+          <div class="table-responsive site-table-scroll console-table-shell">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th data-i18n="table.time">时间</th>
+                  <th data-i18n="table.change">变动</th>
+                  <th data-i18n="table.before">变动前</th>
+                  <th data-i18n="table.after">变动后</th>
+                  <th data-i18n="table.type">类型</th>
+                </tr>
+              </thead>
+              <tbody id="balanceTable"></tbody>
+            </table>
+          </div>
+          <div class="pagination-bar" id="balancePager">
+            <span class="pagination-info" id="balancePageInfo"></span>
+            <div class="pagination-actions">
+              <button type="button" id="balancePrevBtn" class="ghost" data-i18n="app.prevPage" disabled>上一页</button>
+              <button type="button" id="balanceNextBtn" class="ghost" data-i18n="app.nextPage" disabled>下一页</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="card console-section mb-4" id="chatTestSection">
+          <div class="console-section-head">
+            <div class="console-section-copy">
+              <h3 class="mb-0" data-i18n="app.chatTestTitle">对话测试</h3>
+              <p class="console-section-desc" data-i18n="app.chatTestDesc">
+                直接使用子令牌测试当前账户可用模型，适合在接入前快速排查。
+              </p>
+            </div>
+          </div>
+          <div class="console-chat-layout">
+            <div class="console-chat-panel">
+              <div class="console-chat-grid">
+                <div class="console-chat-field">
+                  <label for="chatTestTokenSelect" data-i18n="app.chatTestTokenLabel">令牌</label>
+                  <select id="chatTestTokenSelect"></select>
+                </div>
+                <div class="console-chat-field">
+                  <label for="chatTestApiMode" data-i18n="app.chatTestApiLabel">接口</label>
+                  <select id="chatTestApiMode">
+                    <option value="openai" data-i18n="app.chatTestApiOpenAI">OpenAI 对话</option>
+                    <option value="responses" data-i18n="app.chatTestApiResponses">OpenAI Responses</option>
+                    <option value="anthropic" data-i18n="app.chatTestApiAnthropic">Anthropic Messages</option>
+                    <option value="gemini-chat" data-i18n="app.chatTestApiGeminiChat">Gemini 对话</option>
+                    <option value="gemini-image" data-i18n="app.chatTestApiGeminiImage">Gemini 生图</option>
+                  </select>
+                </div>
+                <div class="console-chat-field" id="chatTestStreamModeWrap">
+                  <label for="chatTestStreamMode" data-i18n="app.chatTestStreamModeLabel">响应格式</label>
+                  <select id="chatTestStreamMode">
+                    <option value="sse" data-i18n="app.chatTestStreamModeSse">流式 (SSE)</option>
+                    <option value="json" data-i18n="app.chatTestStreamModeJson">非流式 (JSON)</option>
+                  </select>
+                </div>
+                <div class="console-chat-field console-chat-field--full">
+                  <label for="chatTestModel" data-i18n="app.chatTestModelLabel">模型</label>
+                  <input
+                    id="chatTestModel"
+                    type="text"
+                    list="chatPricingModels"
+                    data-i18n-placeholder="app.chatTestModelPlaceholder"
+                    placeholder="例如：gpt-4o-mini"
+                  />
+                  <datalist id="chatPricingModels"></datalist>
+                </div>
+                <div id="chatTestGeminiOpts" class="console-chat-field console-chat-field--full" hidden>
+                  <div class="console-chat-grid console-chat-grid--inline">
+                    <div class="console-chat-field">
+                      <label for="chatTestGeminiAspect" data-i18n="app.chatTestAspectLabel">宽高比</label>
+                      <select id="chatTestGeminiAspect">
+                        <option value="1:1">1:1</option>
+                        <option value="2:3">2:3</option>
+                        <option value="3:2">3:2</option>
+                        <option value="3:4" selected>3:4</option>
+                        <option value="4:3">4:3</option>
+                        <option value="4:5">4:5</option>
+                        <option value="5:4">5:4</option>
+                        <option value="9:16">9:16</option>
+                        <option value="16:9">16:9</option>
+                        <option value="21:9">21:9</option>
+                      </select>
+                    </div>
+                    <div class="console-chat-field">
+                      <label for="chatTestGeminiSize" data-i18n="app.chatTestImageSizeLabel">图像尺寸</label>
+                      <select id="chatTestGeminiSize">
+                        <option value="512">512</option>
+                        <option value="1K" selected>1K</option>
+                        <option value="2K">2K</option>
+                        <option value="4K">4K</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div class="console-chat-field console-chat-gemini-images-field">
+                    <label for="chatTestGeminiImages" data-i18n="app.chatTestGeminiImagesLabel">参考图（可多选）</label>
+                    <input
+                      id="chatTestGeminiImages"
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      class="console-chat-file-input"
+                    />
+                    <p class="muted console-chat-file-hint" data-i18n="app.chatTestGeminiImagesHint">
+                      可选。按选择顺序生成多个 inlineData 分片，再附加下方文字（与官方多图 + 文本格式一致）。
+                    </p>
+                    <p id="chatTestGeminiImageSummary" class="muted console-chat-file-summary" hidden></p>
+                  </div>
+                </div>
+                <div class="console-chat-field console-chat-field--full">
+                  <label for="chatTestPrompt" data-i18n="app.chatTestPromptLabel">你的消息</label>
+                  <textarea
+                    id="chatTestPrompt"
+                    rows="5"
+                    data-i18n-placeholder="app.chatTestPromptPlaceholder"
+                    placeholder="你好，请帮我输出一段健康检查文案。"
+                  ></textarea>
+                </div>
+              </div>
+              <div class="console-chat-actions">
+                <button id="chatTestBtn" type="button" data-i18n="app.chatTestSend">发送测试</button>
+              </div>
+              <div id="chatTestMsg" class="msg"></div>
+            </div>
+            <div class="console-chat-result">
+              <div id="chatTestOutput" class="console-output-panel" aria-live="polite"></div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <div
+      id="createTokenModal"
+      class="app-modal-backdrop modal-hidden"
+      aria-hidden="true"
+      role="presentation"
+      translate="no"
+    >
+      <div class="app-modal-panel app-modal-panel--form card" role="dialog" aria-modal="true" aria-labelledby="createTokenModalTitle">
+        <div class="app-modal-head">
+          <h3 id="createTokenModalTitle" data-i18n="app.addToken">添加令牌</h3>
+          <p class="app-modal-desc muted" data-i18n="app.createTokenDesc">
+            填写名称与分组后创建新的子令牌；创建成功后会弹出完整明文供复制。
+          </p>
+        </div>
+        <form id="tokenForm" class="console-modal-form token-create-form">
+          <div class="console-modal-form-grid">
+            <div class="console-modal-field">
+              <label for="tokenName" data-i18n="app.tokenName">令牌名称</label>
+              <input id="tokenName" type="text" data-i18n-placeholder="app.tokenNamePlaceholder" placeholder="如：生产环境" required />
+            </div>
+            <div class="console-modal-field">
+              <label for="tokenGroup" data-i18n="app.tokenGroup">令牌分组</label>
+              <select id="tokenGroup">
+                <option value="default" selected>default</option>
+              </select>
+            </div>
+          </div>
+          <div id="tokenMsg" class="msg console-token-msg"></div>
+          <div class="app-modal-actions">
+            <button type="button" id="createTokenModalCancel" class="ghost" data-i18n="common.cancel">取消</button>
+            <button type="submit" class="secondary" data-i18n="app.createToken">创建令牌</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div
+      id="newTokenModal"
+      class="app-modal-backdrop modal-hidden"
+      aria-hidden="true"
+      role="presentation"
+      translate="no"
+    >
+      <div class="app-modal-panel card" role="dialog" aria-modal="true" aria-labelledby="newTokenModalTitle">
+        <h3 id="newTokenModalTitle" data-i18n="app.createSuccess">创建成功</h3>
+        <input type="text" id="newTokenModalValue" readonly autocomplete="off" spellcheck="false" />
+        <div class="app-modal-actions">
+          <button type="button" id="newTokenModalCopy" class="ghost" data-i18n="common.copy">复制</button>
+          <button type="button" id="newTokenModalClose" class="secondary" data-i18n="common.close">关闭</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="js/i18n.js"></script>
+    <script
+      src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
+      crossorigin="anonymous"
+    ></script>
+    <script
+      src="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.all.min.js"
+      crossorigin="anonymous"
+    ></script>
+    <script src="js/ui-dialog.js"></script>
+    <script src="js/app.js"></script>
+  </body>
+</html>

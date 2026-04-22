@@ -1,0 +1,39 @@
+{
+  "schema_version": "1.0.0",
+  "generated_at": "2026-04-22T06:46:11.670Z",
+  "overall_score": 50,
+  "checks": [
+    {
+      "check": "business_doc_id_coverage",
+      "description": "代码源文件中的 business_doc_id 标注覆盖率（多语言启发式）",
+      "score": 0,
+      "details": {
+        "total_modules": 125,
+        "annotated_modules": 0,
+        "missing": [
+          "scripts/openclaw-sync-traffic-models.py",
+          "cmd/control/main.go",
+          "cmd/gateway/main.go",
+          "pkg/aidoc/aidoc.go",
+          "pkg/crypto/crypto.go",
+          "pkg/errcode/errcode.go",
+          "pkg/httputil/json_bind_error.go",
+          "pkg/httputil/request_id.go",
+          "pkg/jwt/jwt.go",
+          "pkg/logger/logger.go"
+        ]
+      }
+    },
+    {
+      "check": "doc_index_consistency",
+      "description": "ai-doc-index.json presence",
+      "score": 100,
+      "details": {
+        "total_entries": 0,
+        "consistent": 0,
+        "orphan_entries": [],
+        "missing_entries": []
+      }
+    }
+  ]
+}

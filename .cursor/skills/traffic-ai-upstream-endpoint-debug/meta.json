@@ -1,0 +1,27 @@
+{
+  "name": "traffic-ai-upstream-endpoint-debug",
+  "description": "排查并修正 traffic-ai 模型账号 endpoint：依据 last_test_error 与 endpoint+/chat/completions 拼接规则，批量探测候选 base；含 Fintopia/DashScope 兼容路径案例。",
+  "triggers": [
+    "模型账号连不通",
+    "上游连通失败",
+    "last_test_error",
+    "model_accounts endpoint",
+    "接入地址",
+    "Fintopia",
+    "all-in-one-ai",
+    "DashScope",
+    "compatible-mode",
+    "chat completions 404",
+    "url error",
+    "上游线路",
+    "探测账号"
+  ],
+  "category": "operations",
+  "requires": {
+    "tools": [],
+    "optional_dependencies": ["mysql client", "curl 或 python3 用于 HTTPS 探测"]
+  },
+  "author": "traffic-ai",
+  "version": "1.0.0",
+  "tags": ["traffic-ai", "upstream", "model-account", "debugging", "mysql"]
+}

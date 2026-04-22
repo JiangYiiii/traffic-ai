@@ -1,0 +1,907 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <link rel="manifest" href="site.webmanifest" />
+    <meta name="theme-color" content="#2563eb" />
+    <meta name="traffic-ai-user-port" content="8080" />
+    <title data-i18n="admin.pageTitle">Traffic AI 管理后台</title>
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+      crossorigin="anonymous"
+    />
+    <link rel="stylesheet" href="css/bootstrap-bridge.css" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div id="adminLoading" class="app-shell py-5 text-center text-muted">
+      <span data-i18n="common.loading">加载中...</span>
+    </div>
+
+    <div id="adminDenied" class="d-none app-shell py-5">
+      <div class="card shadow-sm">
+        <div class="card-body">
+          <p class="msg err mb-3" data-i18n="admin.deniedMsg">您没有权限访问管理后台。</p>
+          <a class="btn btn-primary btn-sm" href="/app.html" data-i18n="nav.backConsole">返回控制台</a>
+        </div>
+      </div>
+    </div>
+
+    <div id="adminApp" class="d-none">
+      <nav class="navbar navbar-expand-lg navbar-light bg-white border-bottom shadow-sm site-navbar">
+        <div class="app-shell app-shell--navbar">
+          <div class="flex-grow-1 min-w-0 me-lg-3">
+            <span class="navbar-brand mb-0" data-i18n="brand.admin">Traffic AI 管理后台</span>
+          </div>
+          <button
+            class="navbar-toggler py-2"
+            type="button"
+            data-bs-toggle="collapse"
+            data-bs-target="#adminNavbar"
+            aria-controls="adminNavbar"
+            aria-expanded="false"
+            aria-label="Menu"
+          >
+            <span class="navbar-toggler-icon"></span>
+          </button>
+          <div class="collapse navbar-collapse" id="adminNavbar">
+            <div class="d-flex flex-wrap gap-2 ms-lg-auto align-items-center site-nav-actions py-3 py-lg-0">
+              <a class="btn btn-outline-secondary btn-sm" href="/app.html" data-i18n="nav.backConsole">返回控制台</a>
+              <select data-lang-switch class="form-select form-select-sm site-lang-select" aria-label="Language">
+                <option value="zh">中文</option>
+                <option value="en">English</option>
+              </select>
+              <button type="button" id="adminLogoutBtn" class="btn btn-dark btn-sm" data-i18n="nav.logout">退出登录</button>
+            </div>
+          </div>
+        </div>
+      </nav>
+
+      <main class="app-main py-4">
+        <div class="app-shell app-dashboard">
+          <p id="adminGlobalMsg" class="msg d-none mb-3" role="status"></p>
+
+          <!-- Tab 导航 -->
+          <ul class="nav nav-tabs mb-4" id="adminTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+              <button class="nav-link active" id="tab-customer" data-bs-toggle="tab" data-bs-target="#pane-customer" type="button" role="tab" aria-controls="pane-customer" aria-selected="true" data-i18n="admin.tab.customerMgmt">客户管理</button>
+            </li>
+            <li class="nav-item" role="presentation" id="tabItem-model">
+              <button class="nav-link" id="tab-model" data-bs-toggle="tab" data-bs-target="#pane-model" type="button" role="tab" aria-controls="pane-model" aria-selected="false" data-i18n="admin.tab.modelMgmt">模型管理</button>
+            </li>
+            <li class="nav-item" role="presentation" id="tabItem-monitor">
+              <button class="nav-link" id="tab-monitor" data-bs-toggle="tab" data-bs-target="#pane-monitor" type="button" role="tab" aria-controls="pane-monitor" aria-selected="false" data-i18n="admin.tab.monitor">流量监控</button>
+            </li>
+          </ul>
+
+          <div class="tab-content" id="adminTabContent">
+            <!-- 模型管理 Tab Pane -->
+            <div class="tab-pane fade" id="pane-model" role="tabpanel" aria-labelledby="tab-model">
+
+          <!-- A. 模型管理 -->
+          <section class="card mb-4" id="modelSection">
+            <div class="card-body">
+              <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+                <h2 class="h5 mb-0" data-i18n="admin.models.title">模型管理</h2>
+                <div class="d-flex flex-wrap gap-2">
+                  <button type="button" class="btn btn-outline-primary btn-sm" id="btnModelBulkPrice" data-i18n="admin.models.bulkPrice">批量设置</button>
+                  <button type="button" class="btn btn-outline-success btn-sm" id="btnModelConnect" data-i18n="admin.models.connect">Connect</button>
+                  <button type="button" class="btn btn-primary btn-sm" id="btnModelAdd" data-i18n="admin.models.add">添加模型</button>
+                </div>
+              </div>
+              <div class="row g-2 align-items-end mb-3">
+                <div class="col-md-3">
+                  <label class="form-label small mb-0" for="modelFilterProvider" data-i18n="admin.models.filterProvider">提供商</label>
+                  <select id="modelFilterProvider" class="form-select form-select-sm">
+                    <option value="" data-i18n="admin.models.filterAll">全部</option>
+                  </select>
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label small mb-0" for="modelFilterQ" data-i18n="admin.models.filterName">模型名</label>
+                  <input type="search" id="modelFilterQ" class="form-control form-control-sm" data-i18n-placeholder="admin.models.filterNamePh" placeholder="模糊搜索" />
+                </div>
+                <div class="col-md-5 d-flex flex-wrap gap-2">
+                  <button type="button" class="btn btn-primary btn-sm" id="btnModelFilter" data-i18n="admin.models.filterApply">筛选</button>
+                  <button type="button" class="btn btn-outline-secondary btn-sm" id="btnModelFilterReset" data-i18n="admin.models.filterReset">重置</button>
+                </div>
+              </div>
+              <p class="text-muted small mb-3" data-i18n="admin.models.hint">展开行可查看并管理该模型下的上游线路。</p>
+              <div class="table-responsive site-table-scroll console-table-shell">
+                <table class="table table-sm align-middle mb-0">
+                  <thead>
+                    <tr>
+                      <th style="width: 2rem" class="text-center">
+                        <input type="checkbox" class="form-check-input model-table-cb" id="modelSelectAll" data-i18n-title="admin.models.selectAll" title="全选本页" />
+                      </th>
+                      <th class="text-muted" style="width: 2.5rem"></th>
+                      <th data-i18n="admin.models.colName">模型名</th>
+                      <th data-i18n="admin.models.colType">类型</th>
+                      <th data-i18n="admin.models.colBilling">计费方式</th>
+                      <th data-i18n="admin.models.colIn">输入价</th>
+                      <th data-i18n="admin.models.colOut">输出价</th>
+                      <th data-i18n="admin.models.reasoningPriceShort">推理价</th>
+                      <th data-i18n="admin.models.perRequestPriceShort">按次价</th>
+                      <th data-i18n="table.status">状态</th>
+                      <th data-i18n="admin.models.isListed">上架状态</th>
+                      <th data-i18n="admin.models.colAccount">账号</th>
+                      <th data-i18n="admin.models.colProvider">提供商</th>
+                      <th data-i18n="admin.models.colAuthType">认证方式</th>
+                      <th class="text-center" style="width: 6rem" data-i18n="admin.models.colConnectivity">连通</th>
+                      <th class="text-center" style="width: 5rem" data-i18n="admin.models.colAccountOnlineStatus">上线状态</th>
+                      <th class="text-end" data-i18n="admin.models.colModelMgmt">模型管理</th>
+                      <th class="text-end" data-i18n="admin.models.colAccountMgmt">账号管理</th>
+                    </tr>
+                  </thead>
+                  <tbody id="modelTableBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+
+          <!-- B. Playground -->
+          <section class="card mb-4" id="playgroundSection">
+            <div class="card-body">
+              <h2 class="h5 mb-2" data-i18n="admin.playground.title">Playground</h2>
+              <p class="text-muted small mb-3" data-i18n="admin.playground.hint">
+                向已配置上游的模型发送一条对话请求，用于快速验证连通与模型 ID 是否正确（走管理端代理，不经过用户网关计费）。
+              </p>
+              <div class="row g-2 align-items-end">
+                <div class="col-md-4">
+                  <label class="form-label" for="pgModelId" data-i18n="admin.playground.pickModel">模型</label>
+                  <select id="pgModelId" class="form-select form-select-sm">
+                    <option value="" data-i18n="admin.playground.pickModelPh">请选择模型</option>
+                  </select>
+                </div>
+                <div class="col-md-2">
+                  <label class="form-label" for="pgMaxTokens" data-i18n="admin.playground.maxTokens">Max tokens</label>
+                  <input type="number" class="form-control form-control-sm" id="pgMaxTokens" min="1" max="4096" value="256" />
+                </div>
+                <div class="col-md-6">
+                  <button type="button" class="btn btn-primary btn-sm" id="btnPgSend" data-i18n="admin.playground.send">发送</button>
+                </div>
+                <div class="col-12">
+                  <label class="form-label" for="pgUserMsg" data-i18n="admin.playground.userMsg">用户消息</label>
+                  <textarea
+                    id="pgUserMsg"
+                    class="form-control form-control-sm"
+                    rows="3"
+                    data-i18n-placeholder="admin.playground.userMsgPh"
+                    placeholder="用一句话描述你想测试的内容"
+                  ></textarea>
+                </div>
+                <div class="col-12">
+                  <span class="form-label d-block" data-i18n="admin.playground.assistant">助手回复</span>
+                  <pre
+                    id="pgOut"
+                    class="border rounded p-2 bg-light small mb-0 text-break"
+                    style="white-space: pre-wrap; min-height: 5rem"
+                  >—</pre>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- C. 令牌分组 -->
+          <section class="card mb-4" id="tokenGroupSection">
+            <div class="card-body">
+              <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+                <h2 class="h5 mb-0" data-i18n="admin.tokenGroups.title">令牌分组管理</h2>
+                <button type="button" class="btn btn-primary btn-sm" id="btnTokenGroupAdd" data-i18n="admin.tokenGroups.add">添加分组</button>
+              </div>
+              <div class="table-responsive site-table-scroll console-table-shell">
+                <table class="table table-sm align-middle mb-0">
+                  <thead>
+                    <tr>
+                      <th data-i18n="table.name">名称</th>
+                      <th data-i18n="admin.tokenGroups.colDesc">描述</th>
+                      <th data-i18n="table.status">状态</th>
+                      <th data-i18n="admin.tokenGroups.colUpstreams">关联上游数</th>
+                      <th data-i18n="table.action">操作</th>
+                    </tr>
+                  </thead>
+                  <tbody id="tokenGroupTableBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+
+          <!-- D. 限流 -->
+          <section class="card mb-4" id="rateLimitSection">
+            <div class="card-body">
+              <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+                <h2 class="h5 mb-0" data-i18n="admin.rateLimits.title">限流规则管理</h2>
+                <button type="button" class="btn btn-primary btn-sm" id="btnRateLimitAdd" data-i18n="admin.rateLimits.add">添加规则</button>
+              </div>
+              <div class="table-responsive site-table-scroll console-table-shell">
+                <table class="table table-sm align-middle mb-0">
+                  <thead>
+                    <tr>
+                      <th data-i18n="table.name">名称</th>
+                      <th data-i18n="admin.rateLimits.colScope">作用域</th>
+                      <th data-i18n="admin.rateLimits.colScopeVal">作用域值</th>
+                      <th>RPM</th>
+                      <th>TPM</th>
+                      <th data-i18n="admin.rateLimits.colConcurrent">并发</th>
+                      <th data-i18n="table.status">状态</th>
+                      <th data-i18n="table.action">操作</th>
+                    </tr>
+                  </thead>
+                  <tbody id="rateLimitTableBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+
+          <!-- E. 使用日志 -->
+          <section class="card mb-4" id="usageLogSection">
+            <div class="card-body">
+              <h2 class="h5 mb-3" data-i18n="admin.usageLogs.title">使用日志</h2>
+              <div class="row g-2 mb-3">
+                <div class="col-md-3">
+                  <label class="form-label small mb-0" for="usageFilterModel" data-i18n="admin.usageLogs.filterModel">模型</label>
+                  <select id="usageFilterModel" class="form-select form-select-sm">
+                    <option value="" data-i18n="admin.usageLogs.filterModelAll">全部模型</option>
+                  </select>
+                </div>
+                <div class="col-md-2">
+                  <select class="form-select form-select-sm" id="usageFilterStatus">
+                    <option value="" data-i18n="admin.usageLogs.statusAll">全部状态</option>
+                    <option value="success" data-i18n="admin.usageLogs.statusSucc">成功</option>
+                    <option value="error" data-i18n="admin.usageLogs.statusFailed">失败</option>
+                  </select>
+                </div>
+                <div class="col-md-2">
+                  <button type="button" class="btn btn-primary btn-sm" id="btnUsageSearch" data-i18n="common.search">搜索</button>
+                </div>
+              </div>
+              <div class="table-responsive site-table-scroll console-table-shell">
+                <table class="table table-sm align-middle mb-0">
+                  <thead>
+                    <tr>
+                      <th>Request ID</th>
+                      <th data-i18n="admin.usageLogs.colUser">用户ID</th>
+                      <th data-i18n="admin.usageLogs.colModel">模型</th>
+                      <th data-i18n="admin.usageLogs.colStatus">状态</th>
+                      <th data-i18n="admin.usageLogs.colTokens">Tokens</th>
+                      <th data-i18n="admin.usageLogs.colCost">费用</th>
+                      <th data-i18n="admin.usageLogs.colLatency">延迟</th>
+                      <th data-i18n="table.time">时间</th>
+                    </tr>
+                  </thead>
+                  <tbody id="usageLogTableBody"></tbody>
+                </table>
+              </div>
+              <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mt-3">
+                <span class="small text-muted" id="usagePageInfo"></span>
+                <div class="btn-group btn-group-sm">
+                  <button type="button" class="btn btn-outline-secondary" id="usagePrev" data-i18n="admin.redeem.prev">上一页</button>
+                  <button type="button" class="btn btn-outline-secondary" id="usageNext" data-i18n="admin.redeem.next">下一页</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+            </div><!-- /pane-model -->
+
+            <!-- 客户管理 Tab Pane -->
+            <div class="tab-pane fade show active" id="pane-customer" role="tabpanel" aria-labelledby="tab-customer">
+
+          <!-- 套餐管理功能已移除，用户现可直接使用所有已上架模型 -->
+
+          <!-- D2. 用户列表 -->
+          <section class="card mb-4" id="userListSection">
+            <div class="card-body">
+              <h2 class="h5 mb-3" data-i18n="admin.users.title">用户列表</h2>
+              <div class="row g-2 mb-3">
+                <div class="col-md-4">
+                  <input type="text" class="form-control form-control-sm" id="userSearchEmail" placeholder="按邮箱搜索" data-i18n-placeholder="admin.users.searchPh" />
+                </div>
+                <div class="col-md-2">
+                  <button type="button" class="btn btn-primary btn-sm" id="btnUserSearch" data-i18n="common.search">搜索</button>
+                </div>
+              </div>
+              <div class="table-responsive site-table-scroll console-table-shell">
+                <table class="table table-sm align-middle mb-0">
+                  <thead>
+                    <tr>
+                      <th>ID</th>
+                      <th data-i18n="admin.users.colEmail">邮箱</th>
+                      <th data-i18n="common.role">角色</th>
+                      <th data-i18n="table.status">状态</th>
+                      <th data-i18n="table.time">注册时间</th>
+                      <th data-i18n="table.action">操作</th>
+                    </tr>
+                  </thead>
+                  <tbody id="userTableBody"></tbody>
+                </table>
+              </div>
+              <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mt-3">
+                <span class="small text-muted" id="userPageInfo"></span>
+                <div class="btn-group btn-group-sm">
+                  <button type="button" class="btn btn-outline-secondary" id="userPrev" data-i18n="admin.redeem.prev">上一页</button>
+                  <button type="button" class="btn btn-outline-secondary" id="userNext" data-i18n="admin.redeem.next">下一页</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- E. 充值 -->
+          <section class="card mb-4" id="chargeSection">
+            <div class="card-body">
+              <h2 class="h5 mb-3" data-i18n="admin.charge.title">用户充值</h2>
+              <div class="row g-3 align-items-end">
+                <div class="col-md-3">
+                  <label class="form-label" for="chargeUserId" data-i18n="admin.charge.userId">用户 ID</label>
+                  <input type="number" class="form-control form-control-sm" id="chargeUserId" min="1" step="1" />
+                </div>
+                <div class="col-md-3">
+                  <label class="form-label" for="chargeAmount" data-i18n="admin.charge.amount">金额（微美元）</label>
+                  <input type="number" class="form-control form-control-sm" id="chargeAmount" min="1" step="1" />
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label" for="chargeDetail" data-i18n="admin.charge.detail">说明</label>
+                  <input type="text" class="form-control form-control-sm" id="chargeDetail" data-i18n-placeholder="admin.charge.detailPh" placeholder="管理员充值" />
+                </div>
+                <div class="col-md-2">
+                  <button type="button" class="btn btn-primary btn-sm w-100" id="btnCharge" data-i18n="admin.charge.submit">充值</button>
+                </div>
+              </div>
+              <p id="chargeResult" class="mt-3 mb-0 small text-success d-none" role="status"></p>
+              <p id="chargeErr" class="mt-3 mb-0 msg err d-none"></p>
+            </div>
+          </section>
+
+          <!-- F. 兑换码 -->
+          <section class="card mb-4" id="redeemSection">
+            <div class="card-body">
+              <h2 class="h5 mb-3" data-i18n="admin.redeem.title">兑换码管理</h2>
+              <div class="row g-3 align-items-end mb-4 pb-3 border-bottom">
+                <div class="col-md-3">
+                  <label class="form-label" for="batchCount" data-i18n="admin.redeem.batchCount">生成数量</label>
+                  <input type="number" class="form-control form-control-sm" id="batchCount" min="1" max="500" value="10" />
+                </div>
+                <div class="col-md-3">
+                  <label class="form-label" for="batchAmount" data-i18n="admin.redeem.batchAmount">面额（微美元）</label>
+                  <input type="number" class="form-control form-control-sm" id="batchAmount" min="1" step="1" />
+                </div>
+                <div class="col-md-2">
+                  <button type="button" class="btn btn-primary btn-sm w-100" id="btnBatchRedeem" data-i18n="admin.redeem.generate">批量生成</button>
+                </div>
+              </div>
+              <p id="batchResult" class="small text-muted mb-3 d-none" role="status"></p>
+              <div class="table-responsive site-table-scroll console-table-shell">
+                <table class="table table-sm align-middle mb-0">
+                  <thead>
+                    <tr>
+                      <th data-i18n="app.codeLabel">兑换码</th>
+                      <th data-i18n="admin.redeem.colAmount">面额</th>
+                      <th data-i18n="table.status">状态</th>
+                      <th data-i18n="admin.redeem.colUsedBy">使用者</th>
+                      <th data-i18n="admin.redeem.colUsedAt">使用时间</th>
+                      <th data-i18n="table.time">创建时间</th>
+                    </tr>
+                  </thead>
+                  <tbody id="redeemTableBody"></tbody>
+                </table>
+              </div>
+              <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mt-3">
+                <span class="small text-muted" id="redeemPageInfo"></span>
+                <div class="btn-group btn-group-sm">
+                  <button type="button" class="btn btn-outline-secondary" id="redeemPrev" data-i18n="admin.redeem.prev">上一页</button>
+                  <button type="button" class="btn btn-outline-secondary" id="redeemNext" data-i18n="admin.redeem.next">下一页</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- H. 充值记录（全站余额流水） -->
+          <section class="card mb-4" id="adminBalanceLogSection">
+            <div class="card-body">
+              <h2 class="h5 mb-3" data-i18n="admin.balanceLogs.title">充值记录</h2>
+              <div class="row g-2 mb-3">
+                <div class="col-md-3">
+                  <select class="form-select form-select-sm" id="balanceLogFilterType">
+                    <option value="" data-i18n="admin.balanceLogs.typeAll">全部类型</option>
+                    <option value="admin_charge" data-i18n="admin.balanceLogs.typeAdminCharge">管理员充值</option>
+                    <option value="redeem" data-i18n="admin.balanceLogs.typeRedeem">兑换码</option>
+                    <option value="consumption" data-i18n="admin.balanceLogs.typeConsumption">消费扣费</option>
+                    <option value="settle" data-i18n="admin.balanceLogs.typeSettle">结算调整</option>
+                  </select>
+                </div>
+                <div class="col-md-2">
+                  <button type="button" class="btn btn-primary btn-sm" id="btnBalanceLogSearch" data-i18n="common.search">搜索</button>
+                </div>
+              </div>
+              <div class="table-responsive site-table-scroll console-table-shell">
+                <table class="table table-sm align-middle mb-0">
+                  <thead>
+                    <tr>
+                      <th>ID</th>
+                      <th data-i18n="admin.balanceLogs.colType">类型</th>
+                      <th data-i18n="admin.balanceLogs.colAmount">变动</th>
+                      <th data-i18n="admin.balanceLogs.colBefore">变动前</th>
+                      <th data-i18n="admin.balanceLogs.colAfter">变动后</th>
+                      <th data-i18n="admin.balanceLogs.colDetail">说明</th>
+                      <th data-i18n="table.time">时间</th>
+                    </tr>
+                  </thead>
+                  <tbody id="adminBalanceLogTableBody"></tbody>
+                </table>
+              </div>
+              <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mt-3">
+                <span class="small text-muted" id="adminBalanceLogPageInfo"></span>
+                <div class="btn-group btn-group-sm">
+                  <button type="button" class="btn btn-outline-secondary" id="adminBalanceLogPrev" data-i18n="admin.redeem.prev">上一页</button>
+                  <button type="button" class="btn btn-outline-secondary" id="adminBalanceLogNext" data-i18n="admin.redeem.next">下一页</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+            </div><!-- /pane-customer -->
+          </div><!-- /tab-content -->
+
+          <!-- ===================== 流量监控 Tab Pane ===================== -->
+          <div class="tab-pane fade" id="pane-monitor" role="tabpanel" aria-labelledby="tab-monitor" style="display:none">
+
+            <!-- 总览视图 -->
+            <div id="monitor-overview-view">
+              <div class="d-flex align-items-center justify-content-between mb-3">
+                <h5 class="mb-0" data-i18n="admin.monitor.overviewTitle">模型流量总览</h5>
+                <div class="d-flex align-items-center gap-2">
+                  <select id="monitorHours" class="form-select form-select-sm" style="width:120px">
+                    <option value="1" data-i18n="admin.monitor.rangeLast1h">近 1 小时</option>
+                    <option value="6" data-i18n="admin.monitor.rangeLast6h">近 6 小时</option>
+                    <option value="24" selected data-i18n="admin.monitor.rangeLast24h">近 24 小时</option>
+                    <option value="168" data-i18n="admin.monitor.rangeLast7d">近 7 天</option>
+                  </select>
+                  <button class="btn btn-outline-primary btn-sm" id="monitorRefreshBtn" data-i18n="admin.monitor.refresh">刷新</button>
+                  <span class="text-muted small" id="monitorLastRefresh"></span>
+                </div>
+              </div>
+              <div id="monitorOverviewGrid" class="row g-3"></div>
+            </div>
+
+            <!-- 模型下钻视图 -->
+            <div id="monitor-model-view" class="d-none">
+              <div class="d-flex align-items-center gap-2 mb-3">
+                <button class="btn btn-outline-secondary btn-sm" id="monitorBackBtn" data-i18n="admin.monitor.back">← 返回总览</button>
+                <h5 class="mb-0" id="monitorModelTitle"></h5>
+                <div class="ms-auto d-flex gap-2">
+                  <select id="monitorDetailHours" class="form-select form-select-sm" style="width:120px">
+                    <option value="1" data-i18n="admin.monitor.rangeLast1h">近 1 小时</option>
+                    <option value="6" data-i18n="admin.monitor.rangeLast6h">近 6 小时</option>
+                    <option value="24" selected data-i18n="admin.monitor.rangeLast24h">近 24 小时</option>
+                  </select>
+                  <select id="monitorDetailGranularity" class="form-select form-select-sm" style="width:100px">
+                    <option value="hour" selected data-i18n="admin.monitor.granHour">按小时</option>
+                    <option value="min" data-i18n="admin.monitor.granMin">按分钟</option>
+                  </select>
+                  <button class="btn btn-outline-primary btn-sm" id="monitorDetailRefreshBtn" data-i18n="admin.monitor.refresh">刷新</button>
+                </div>
+              </div>
+
+              <!-- 时间趋势图（简单 SVG 折线图） -->
+              <div class="card mb-3">
+                <div class="card-header py-2 small fw-bold" data-i18n="admin.monitor.trendTitle">请求量趋势</div>
+                <div class="card-body p-2">
+                  <canvas id="monitorTrendChart" height="80"></canvas>
+                </div>
+              </div>
+
+              <!-- 账号指标表 -->
+              <div class="card">
+                <div class="card-header py-2 small fw-bold" data-i18n="admin.monitor.accountTitle">账号维度指标</div>
+                <div class="table-responsive">
+                  <table class="table table-sm table-hover mb-0" id="monitorAccountTable">
+                    <thead class="table-light">
+                      <tr>
+                        <th data-i18n="admin.monitor.colAccount">账号</th>
+                        <th data-i18n="admin.monitor.colProvider">提供商</th>
+                        <th data-i18n="admin.monitor.colStatus">状态</th>
+                        <th data-i18n="admin.monitor.colReqs">请求数</th>
+                        <th data-i18n="admin.monitor.colErrRate">错误率</th>
+                        <th data-i18n="admin.monitor.colLatency">均延迟 (ms)</th>
+                        <th data-i18n="admin.monitor.colTokens">Tokens</th>
+                        <th data-i18n="admin.monitor.colAction">操作</th>
+                      </tr>
+                    </thead>
+                    <tbody id="monitorAccountTbody"></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+          </div><!-- /pane-monitor -->
+
+        </div>
+      </main>
+    </div>
+
+    <!-- 模型弹窗 -->
+    <div class="modal fade" id="modelModal" tabindex="-1" aria-labelledby="modelModalTitle" aria-hidden="true">
+      <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="modelModalTitle" data-i18n="admin.models.modalTitle">模型</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <input type="hidden" id="modelEditId" value="" />
+            <div id="modelDiscoverSection" class="col-12 mb-3 d-none">
+              <div class="border rounded p-2 bg-light">
+                <div class="small fw-bold mb-2" data-i18n="admin.models.discoverTitle">接入助手</div>
+                <div class="row g-2">
+                  <div class="col-md-6">
+                    <label class="form-label" for="providerCatalog" data-i18n="admin.models.vendor">商家</label>
+                    <select id="providerCatalog" class="form-select form-select-sm">
+                      <option value="" data-i18n="admin.models.pickVendor">请选择商家</option>
+                    </select>
+                  </div>
+                  <div class="col-md-6">
+                    <label class="form-label" for="providerAuthType" data-i18n="admin.models.authType">接入方式</label>
+                    <select id="providerAuthType" class="form-select form-select-sm"></select>
+                  </div>
+                  <div class="col-12 d-none" id="discoverBaseUrlWrap">
+                    <label class="form-label" for="discoverBaseUrl" data-i18n="admin.models.baseUrl">Base URL</label>
+                    <input type="url" class="form-control form-control-sm" id="discoverBaseUrl" autocomplete="off" />
+                    <p class="form-text small mb-0 text-muted" id="discoverBaseUrlHelp"></p>
+                  </div>
+                  <div class="col-12" id="discoverCredentialWrap">
+                    <label class="form-label" for="discoverCredential" data-i18n="admin.models.discoverCred">API Key / Token</label>
+                    <input type="password" class="form-control form-control-sm" id="discoverCredential" autocomplete="off" />
+                  </div>
+                  <div class="col-12 d-none" id="oauthAuthorizeWrap">
+                    <button type="button" class="btn btn-success btn-sm" id="btnOAuthAuthorize">
+                      <span data-i18n="admin.models.oauthAuthorize">授权登录</span>
+                    </button>
+                    <span id="oauthStatus" class="small text-muted ms-2"></span>
+                    <a href="#" id="oauthFallbackLink" class="small d-none ms-2" target="_blank" rel="noopener">
+                      <span data-i18n="admin.models.oauthFallbackLink">手动打开授权页</span>
+                    </a>
+                  </div>
+                  <div class="col-12 d-flex flex-wrap gap-2 align-items-center">
+                    <button type="button" class="btn btn-outline-primary btn-sm" id="btnDiscoverModels" data-i18n="admin.models.discoverBtn">
+                      拉取远端模型列表
+                    </button>
+                    <span id="discoverStatus" class="small text-muted"></span>
+                  </div>
+                  <div class="col-12 d-none" id="discoverPickWrap">
+                    <label class="form-label" for="discoverModelPick" data-i18n="admin.models.discoverPickMulti">远端模型（可多选）</label>
+                    <select id="discoverModelPick" class="form-select form-select-sm" multiple size="8"></select>
+                    <button type="button" class="btn btn-primary btn-sm mt-2" id="btnDiscoverBatchAdd" data-i18n="admin.models.discoverBatchAdd">
+                      批量添加所选
+                    </button>
+                  </div>
+                </div>
+                <p class="form-text small text-muted mb-0 mt-2" data-i18n="admin.models.discoverHint">
+                  若拉取失败，仍可手动填写下方模型名与提供商。
+                </p>
+              </div>
+            </div>
+            <div id="batchStagedBadge" class="alert alert-info py-1 px-2 small d-none mb-2"></div>
+            <p class="form-text small text-muted mb-2" data-i18n="admin.models.routingViaUpstream">
+              实际转发使用的「端点 / Base URL、密钥」请在保存本模型后，展开该行，在「上游线路」中添加并填写。
+            </p>
+            <div class="row g-2">
+              <div class="col-md-6">
+                <label class="form-label" for="model_name" data-i18n="admin.models.colName">模型名</label>
+                <input type="text" class="form-control form-control-sm" id="model_name" required />
+              </div>
+              <div class="col-md-6">
+                <label class="form-label" for="provider" data-i18n="admin.models.colProvider">提供商</label>
+                <input type="text" class="form-control form-control-sm" id="provider" required />
+              </div>
+              <div class="col-md-4">
+                <label class="form-label" for="model_type" data-i18n="admin.models.colType">类型</label>
+                <input type="text" class="form-control form-control-sm" id="model_type" placeholder="chat" />
+              </div>
+              <div class="col-md-4">
+                <label class="form-label" for="billing_type" data-i18n="admin.models.colBilling">计费方式</label>
+                <select class="form-select form-select-sm" id="billing_type">
+                  <option value="per_token">per_token</option>
+                  <option value="per_request">per_request</option>
+                </select>
+              </div>
+              <div class="col-12 col-md-4 d-flex align-items-center">
+                <div class="form-check form-switch admin-form-switch mt-md-4">
+                  <input class="form-check-input" type="checkbox" id="model_is_active" checked role="switch" />
+                  <label class="form-check-label" for="model_is_active" data-i18n="status.enabled">启用</label>
+                </div>
+              </div>
+              <div class="col-12 col-md-4 d-flex align-items-center">
+                <div class="form-check form-switch admin-form-switch mt-md-4">
+                  <input class="form-check-input" type="checkbox" id="model_is_listed" role="switch" />
+                  <label class="form-check-label" for="model_is_listed" data-i18n="admin.models.isListed">上架状态</label>
+                </div>
+              </div>
+              <div class="col-12">
+                <p class="form-text small text-muted mb-0" data-i18n="admin.models.priceHint">
+                  按 token 计费单位「微美元 / 每 1M tokens」（$1/1M = 1 000 000）；按次计费单位「微美元 / 每次」（$1 = 1 000 000）。请填整数，不要使用小数。
+                </p>
+              </div>
+              <div class="col-md-4">
+                <label class="form-label" for="input_price" data-i18n="admin.models.inputPriceForm">输入价（微美元/1M tokens）</label>
+                <input type="number" class="form-control form-control-sm" id="input_price" min="0" step="1" value="1" />
+              </div>
+              <div class="col-md-4">
+                <label class="form-label" for="output_price" data-i18n="admin.models.outputPriceForm">输出价（微美元/1M tokens）</label>
+                <input type="number" class="form-control form-control-sm" id="output_price" min="0" step="1" value="1" />
+              </div>
+              <div class="col-md-4">
+                <label class="form-label" for="reasoning_price" data-i18n="admin.models.reasoningPrice">推理价（微美元/1M tokens）</label>
+                <input type="number" class="form-control form-control-sm" id="reasoning_price" min="0" step="1" value="1" />
+              </div>
+              <div class="col-md-4">
+                <label class="form-label" for="per_request_price" data-i18n="admin.models.perRequestPrice">按次价（微美元/次）</label>
+                <input type="number" class="form-control form-control-sm" id="per_request_price" min="0" step="1" value="1" />
+              </div>
+            </div>
+            <hr class="my-3" />
+            <label class="form-label fw-semibold" data-i18n="admin.models.linkedAccount">关联账号</label>
+            <p class="small text-muted mb-2" data-i18n="admin.models.linkedAccountHint">勾选需要绑定到该模型的提供商账号，保存时将自动创建或更新上游线路。</p>
+            <div id="modelAccountCheckboxes" class="row g-2"></div>
+
+            <p id="modelModalErr" class="msg err mt-3 d-none"></p>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal" data-i18n="common.cancel">取消</button>
+            <button type="button" class="btn btn-primary btn-sm" id="modelModalSave" data-i18n="common.ok">确定</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal fade" id="bulkPricingModal" tabindex="-1" aria-labelledby="bulkPricingModalTitle" aria-hidden="true">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="bulkPricingModalTitle" data-i18n="admin.models.bulkPriceTitle">批量设置计费</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <p class="small text-muted" data-i18n="admin.models.bulkPriceHint">将以下值应用到列表中勾选的模型。</p>
+            <div class="mb-2">
+              <label class="form-label" for="bulkPricingBilling" data-i18n="admin.models.colBilling">计费方式</label>
+              <select id="bulkPricingBilling" class="form-select form-select-sm">
+                <option value="per_token">per_token</option>
+                <option value="per_request">per_request</option>
+              </select>
+            </div>
+            <div class="row g-2">
+              <div class="col-6">
+                <label class="form-label" for="bulkPricingIn" data-i18n="admin.models.inputPriceForm">输入价（微美元/1M tokens）</label>
+                <input type="number" class="form-control form-control-sm" id="bulkPricingIn" min="0" step="1" value="1" />
+              </div>
+              <div class="col-6">
+                <label class="form-label" for="bulkPricingOut" data-i18n="admin.models.outputPriceForm">输出价（微美元/1M tokens）</label>
+                <input type="number" class="form-control form-control-sm" id="bulkPricingOut" min="0" step="1" value="1" />
+              </div>
+              <div class="col-6">
+                <label class="form-label" for="bulkPricingReason" data-i18n="admin.models.reasoningPrice">推理价（微美元/1M tokens）</label>
+                <input type="number" class="form-control form-control-sm" id="bulkPricingReason" min="0" step="1" value="1" />
+              </div>
+              <div class="col-6">
+                <label class="form-label" for="bulkPricingPer" data-i18n="admin.models.perRequestPrice">按次价（微美元/次）</label>
+                <input type="number" class="form-control form-control-sm" id="bulkPricingPer" min="0" step="1" value="1" />
+              </div>
+            </div>
+            <p id="bulkPricingErr" class="msg err mt-2 d-none"></p>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal" data-i18n="common.cancel">取消</button>
+            <button type="button" class="btn btn-primary btn-sm" id="bulkPricingSave" data-i18n="common.ok">保存</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 上游线路弹窗 -->
+    <div class="modal fade" id="upstreamModal" tabindex="-1" aria-labelledby="upstreamModalTitle" aria-hidden="true">
+      <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="upstreamModalTitle" data-i18n="admin.upstreams.modalTitle">上游线路</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <input type="hidden" id="upstreamEditId" value="" />
+            <input type="hidden" id="upstreamModelId" value="" />
+            <div class="row g-2">
+              <div class="col-md-6">
+                <label class="form-label" for="up_name" data-i18n="table.name">名称</label>
+                <input type="text" class="form-control form-control-sm" id="up_name" />
+              </div>
+              <div class="col-md-6">
+                <label class="form-label" for="up_provider" data-i18n="admin.upstreams.colProvider">商家</label>
+                <select id="up_provider" class="form-select form-select-sm">
+                  <option value="" data-i18n="admin.upstreams.pickProvider">请选择商家</option>
+                </select>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label" for="up_auth_type" data-i18n="admin.upstreams.authType">接入方式</label>
+                <select id="up_auth_type" class="form-select form-select-sm">
+                  <option value="api_key">API Key</option>
+                  <option value="oauth_authorization_code">OAuth（授权码）</option>
+                </select>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label" for="up_protocol" data-i18n="admin.upstreams.colProtocol">协议</label>
+                <input type="text" class="form-control form-control-sm" id="up_protocol" placeholder="chat" />
+              </div>
+              <div class="col-12">
+                <label class="form-label" for="up_endpoint" data-i18n="admin.upstreams.colEndpoint">端点</label>
+                <input type="url" class="form-control form-control-sm" id="up_endpoint" required />
+              </div>
+              <div class="col-12">
+                <label class="form-label" for="up_credential" data-i18n="admin.upstreams.credential">密钥</label>
+                <input type="password" class="form-control form-control-sm" id="up_credential" autocomplete="new-password" />
+                <div class="form-text small" data-i18n="admin.upstreams.credentialHint">编辑时留空表示不修改已存密钥。</div>
+              </div>
+              <div class="col-md-4">
+                <label class="form-label" for="up_weight" data-i18n="admin.upstreams.colWeight">权重</label>
+                <input type="number" class="form-control form-control-sm" id="up_weight" min="1" value="1" />
+              </div>
+              <div class="col-md-4">
+                <label class="form-label" for="up_timeout_sec" data-i18n="admin.upstreams.colTimeout">超时（秒）</label>
+                <input type="number" class="form-control form-control-sm" id="up_timeout_sec" min="1" value="60" />
+              </div>
+              <div class="col-12 col-md-4 d-flex align-items-center">
+                <div class="form-check form-switch admin-form-switch mt-md-4">
+                  <input class="form-check-input" type="checkbox" id="up_is_active" checked role="switch" />
+                  <label class="form-check-label" for="up_is_active" data-i18n="status.enabled">启用</label>
+                </div>
+              </div>
+            </div>
+            <p id="upstreamModalErr" class="msg err mt-3 d-none"></p>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal" data-i18n="common.cancel">取消</button>
+            <button type="button" class="btn btn-primary btn-sm" id="upstreamModalSave" data-i18n="common.ok">确定</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 令牌分组创建 -->
+    <div class="modal fade" id="tokenGroupModal" tabindex="-1" aria-labelledby="tokenGroupModalTitle" aria-hidden="true">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="tokenGroupModalTitle" data-i18n="admin.tokenGroups.modalTitle">新建分组</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <div class="mb-2">
+              <label class="form-label" for="tg_name" data-i18n="table.name">名称</label>
+              <input type="text" class="form-control form-control-sm" id="tg_name" required />
+            </div>
+            <div class="mb-2">
+              <label class="form-label" for="tg_description" data-i18n="admin.tokenGroups.colDesc">描述</label>
+              <input type="text" class="form-control form-control-sm" id="tg_description" />
+            </div>
+            <div class="mt-2">
+              <div class="form-check form-switch admin-form-switch">
+                <input class="form-check-input" type="checkbox" id="tg_is_active" checked role="switch" />
+                <label class="form-check-label" for="tg_is_active" data-i18n="status.enabled">启用</label>
+              </div>
+            </div>
+            <p id="tokenGroupModalErr" class="msg err mt-3 d-none"></p>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal" data-i18n="common.cancel">取消</button>
+            <button type="button" class="btn btn-primary btn-sm" id="tokenGroupModalSave" data-i18n="common.ok">确定</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 分组关联上游 -->
+    <div class="modal fade" id="tgLinksModal" tabindex="-1" aria-labelledby="tgLinksModalTitle" aria-hidden="true">
+      <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="tgLinksModalTitle" data-i18n="admin.tokenGroups.linksTitle">管理关联上游</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <input type="hidden" id="tgLinksGroupId" value="" />
+            <p class="small text-muted" data-i18n="admin.tokenGroups.linksHint">从已配置的上游线路中选择并关联到本分组。</p>
+            <div class="d-flex flex-wrap gap-2 mb-3">
+              <select class="form-select form-select-sm flex-grow-1" id="tgLinksSelect" style="min-width: 200px"></select>
+              <button type="button" class="btn btn-primary btn-sm" id="tgLinksAddBtn" data-i18n="admin.tokenGroups.linkAdd">添加关联</button>
+            </div>
+            <div class="table-responsive console-table-shell">
+              <table class="table table-sm align-middle mb-0">
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th data-i18n="table.model">模型</th>
+                    <th data-i18n="table.name">名称</th>
+                    <th data-i18n="admin.upstreams.colEndpoint">端点</th>
+                    <th data-i18n="table.action">操作</th>
+                  </tr>
+                </thead>
+                <tbody id="tgLinksTableBody"></tbody>
+              </table>
+            </div>
+            <p id="tgLinksErr" class="msg err mt-3 d-none"></p>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal" data-i18n="common.close">关闭</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 限流规则弹窗 -->
+    <div class="modal fade" id="rateLimitModal" tabindex="-1" aria-labelledby="rateLimitModalTitle" aria-hidden="true">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="rateLimitModalTitle" data-i18n="admin.rateLimits.modalTitle">限流规则</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <input type="hidden" id="rl_id" value="" />
+            <div class="mb-2">
+              <label class="form-label" for="rl_name" data-i18n="table.name">名称</label>
+              <input type="text" class="form-control form-control-sm" id="rl_name" required />
+            </div>
+            <div class="mb-2">
+              <label class="form-label" for="rl_scope" data-i18n="admin.rateLimits.colScope">作用域</label>
+              <select class="form-select form-select-sm" id="rl_scope">
+                <option value="global">global</option>
+                <option value="user">user</option>
+                <option value="api_key">api_key</option>
+                <option value="model">model</option>
+              </select>
+            </div>
+            <div class="mb-2">
+              <label class="form-label" for="rl_scope_value" data-i18n="admin.rateLimits.colScopeVal">作用域值</label>
+              <input type="text" class="form-control form-control-sm" id="rl_scope_value" data-i18n-placeholder="admin.rateLimits.scopeValPh" placeholder="global 可留空" />
+            </div>
+            <div class="row g-2">
+              <div class="col-4">
+                <label class="form-label" for="rl_max_rpm">RPM</label>
+                <input type="number" class="form-control form-control-sm" id="rl_max_rpm" min="0" value="0" />
+              </div>
+              <div class="col-4">
+                <label class="form-label" for="rl_max_tpm">TPM</label>
+                <input type="number" class="form-control form-control-sm" id="rl_max_tpm" min="0" value="0" />
+              </div>
+              <div class="col-4">
+                <label class="form-label" for="rl_max_concurrent" data-i18n="admin.rateLimits.colConcurrent">并发</label>
+                <input type="number" class="form-control form-control-sm" id="rl_max_concurrent" min="0" value="0" />
+              </div>
+            </div>
+            <div class="mt-3">
+              <div class="form-check form-switch admin-form-switch">
+                <input class="form-check-input" type="checkbox" id="rl_is_active" checked role="switch" />
+                <label class="form-check-label" for="rl_is_active" data-i18n="status.enabled">启用</label>
+              </div>
+            </div>
+            <p id="rateLimitModalErr" class="msg err mt-3 d-none"></p>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal" data-i18n="common.cancel">取消</button>
+            <button type="button" class="btn btn-primary btn-sm" id="rateLimitModalSave" data-i18n="common.ok">确定</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 套餐弹窗 -->
+    <!-- 套餐管理模态对话框已移除 -->
+
+    <script src="js/i18n.js"></script>
+    <script
+      src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
+      crossorigin="anonymous"
+    ></script>
+    <script src="js/admin.js"></script>
+  </body>
+</html>

@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <meta name="theme-color" content="#2563eb" />
+    <title data-i18n="docs.htmlTitle">API 接入文档 · Traffic AI</title>
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+      crossorigin="anonymous"
+    />
+    <link rel="stylesheet" href="css/bootstrap-bridge.css" />
+    <link rel="stylesheet" href="styles.css" />
+    <style>
+      .docs-layout{display:flex;min-height:100vh}
+      .docs-sidebar{width:260px;border-right:1px solid var(--border);padding:1.5rem 1rem;overflow-y:auto;position:sticky;top:0;height:100vh;flex-shrink:0}
+      .docs-main{flex:1;padding:2rem 2.5rem;max-width:900px;min-width:0}
+      .docs-sidebar h4{font-size:.85rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin:1.2rem 0 .4rem}
+      .docs-sidebar a{display:block;padding:.25rem .5rem;border-radius:6px;font-size:.9rem;color:var(--fg);text-decoration:none}
+      .docs-sidebar a:hover,.docs-sidebar a.active{background:var(--accent-bg,#eef2ff);color:var(--accent,#4f46e5)}
+      .docs-nav{display:flex;align-items:center;gap:.75rem;padding:.75rem 1.5rem;border-bottom:1px solid var(--border);background:#fff}
+      .docs-nav .brand{font-weight:600;font-size:1.05rem}
+      .docs-nav .spacer{flex:1}
+      .docs-section{display:none}
+      .docs-section.active{display:block}
+      .docs-code-block{position:relative;background:#1e1e2e;color:#cdd6f4;border-radius:8px;padding:1rem;overflow-x:auto;font-size:.85rem;line-height:1.6;margin:1rem 0}
+      .docs-code-block .copy-btn{position:absolute;top:.5rem;right:.5rem;background:rgba(255,255,255,.12);border:none;color:#cdd6f4;padding:2px 10px;border-radius:4px;cursor:pointer;font-size:.8rem}
+      .docs-code-block .copy-btn:hover{background:rgba(255,255,255,.2)}
+      .docs-hint{background:#f0f4ff;border-left:3px solid #4f46e5;padding:.75rem 1rem;border-radius:0 8px 8px 0;margin:1rem 0;font-size:.9rem}
+      .docs-base-url{font-family:monospace;background:#f5f5f5;padding:.2rem .5rem;border-radius:4px;user-select:all}
+      #docsModelTable th,#docsModelTable td{font-size:.82rem;white-space:nowrap}
+      @media(max-width:768px){.docs-sidebar{display:none}.docs-main{padding:1rem}}
+    </style>
+  </head>
+  <body>
+    <div class="docs-nav">
+      <span class="brand" data-i18n="docs.brand">API 接入文档</span>
+      <span class="spacer"></span>
+      <select data-lang-switch class="form-select form-select-sm" style="width:auto" aria-label="Language">
+        <option value="zh">中文</option>
+        <option value="en">English</option>
+      </select>
+      <span id="docsAuthStatus" class="small muted" data-i18n="docs.auth.unknown">状态：—</span>
+      <a class="btn btn-outline-secondary btn-sm" href="/app.html" data-i18n="docs.navConsole">控制台</a>
+    </div>
+
+    <div class="docs-layout">
+      <nav class="docs-sidebar" id="docsSidebar">
+        <h4 data-i18n="docs.tocTitle">本页目录</h4>
+        <a href="#" data-section="overview" class="active" data-i18n="docs.toc.overview">概述</a>
+        <a href="#" data-section="models" data-i18n="docs.toc.models">支持的模型</a>
+        <a href="#" data-section="auth" data-i18n="docs.toc.auth">鉴权与分组</a>
+        <h4 data-i18n="docs.toc.groupProtocol">协议</h4>
+        <a href="#" data-section="openai" data-i18n="docs.toc.openai">OpenAI 兼容</a>
+        <a href="#" data-section="embeddings" data-i18n="docs.toc.embeddings">OpenAI Embeddings</a>
+        <a href="#" data-section="speech" data-i18n="docs.toc.speech">OpenAI Audio Speech</a>
+        <a href="#" data-section="responses" data-i18n="docs.toc.responses">OpenAI Responses</a>
+        <a href="#" data-section="gemini" data-i18n="docs.toc.gemini">Gemini generateContent</a>
+        <a href="#" data-section="anthropic" data-i18n="docs.toc.anthropic">Anthropic Messages</a>
+        <h4 data-i18n="docs.toc.groupClient">客户端</h4>
+        <a href="#" data-section="openclaw" data-i18n="docs.toc.openclaw">OpenClaw</a>
+        <a href="#" data-section="cursor" data-i18n="docs.toc.agents.cursor">Cursor</a>
+        <a href="#" data-section="copilot" data-i18n="docs.toc.agents.copilot">Copilot</a>
+        <a href="#" data-section="codex" data-i18n="docs.toc.agents.codex">Codex</a>
+        <a href="#" data-section="continue" data-i18n="docs.toc.agents.continue">Continue</a>
+        <a href="#" data-section="cline" data-i18n="docs.toc.agents.cline">Cline / Roo</a>
+        <a href="#" data-section="windsurf" data-i18n="docs.toc.agents.windsurf">Windsurf</a>
+        <a href="#" data-section="claude-native" data-i18n="docs.toc.agents.claudeNative">Anthropic 原生</a>
+        <h4 data-i18n="docs.toc.groupPlatform">平台</h4>
+        <a href="#" data-section="platforms" data-i18n="docs.toc.platforms">自动化与编排</a>
+        <a href="#" data-section="faq" data-i18n="docs.toc.faq">常见问题</a>
+      </nav>
+
+      <main class="docs-main">
+        <div class="mb-3">
+          <p class="small muted" data-i18n="docs.subtitle">OpenAI / Embeddings / Speech / Responses / Anthropic / Gemini · 子令牌计费</p>
+          <p class="small"><span data-i18n="docs.baseHintLabel">当前站点 API 根路径（OpenAI 用）：</span><code class="docs-base-url" id="docsBaseUrl"></code></p>
+          <p class="small"><span data-i18n="docs.messagesHintLabel">Messages 完整路径：</span><code class="docs-base-url" id="docsMessagesUrl"></code></p>
+          <p class="small"><span data-i18n="docs.responsesHintLabel">Responses 完整路径：</span><code class="docs-base-url" id="docsResponsesUrl"></code></p>
+          <div class="mb-2">
+            <label class="small" data-i18n="docs.tokenSelectLabel">选择子令牌</label>
+            <select id="docsTokenSelect" class="form-select form-select-sm" style="max-width:400px"></select>
+            <span class="small muted" data-i18n="docs.tokenSelectHint">提示：需要先登录并创建子令牌。</span>
+          </div>
+        </div>
+
+        <!-- overview -->
+        <section class="docs-section active" id="sec-overview">
+          <h2 data-i18n="docs.h2.overview">概述</h2>
+          <p data-i18n="docs.intro"></p>
+          <ul>
+            <li data-i18n="docs.li.dual"></li>
+            <li data-i18n="docs.li.billing"></li>
+            <li data-i18n="docs.li.https"></li>
+          </ul>
+        </section>
+
+        <!-- models -->
+        <section class="docs-section" id="sec-models">
+          <h2 data-i18n="docs.h2.models">当前支持的模型</h2>
+          <p data-i18n="docs.models.lead"></p>
+          <div class="table-responsive">
+            <table class="table table-sm" id="docsModelTable">
+              <thead>
+                <tr>
+                  <th data-i18n="docs.models.thModel">模型</th>
+                  <th data-i18n="docs.models.thInput">输入 ($/1M)</th>
+                  <th data-i18n="docs.models.thOutput">输出 ($/1M)</th>
+                </tr>
+              </thead>
+              <tbody id="docsModelTableBody">
+                <tr><td colspan="3" data-i18n="docs.models.loading">正在加载模型列表…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- auth -->
+        <section class="docs-section" id="sec-auth">
+          <h2 data-i18n="docs.h2.auth">鉴权与令牌分组</h2>
+          <ul>
+            <li data-i18n="docs.li.openaiAuth"></li>
+            <li data-i18n="docs.li.anthropicAuth"></li>
+            <li data-i18n="docs.li.tokenGroup"></li>
+          </ul>
+        </section>
+
+        <!-- openai -->
+        <section class="docs-section" id="sec-openai">
+          <h2 data-i18n="docs.h2.openai">OpenAI 兼容：/v1/chat/completions</h2>
+          <p data-i18n="docs.openai.p1"></p>
+          <p data-i18n="docs.openai.stream"></p>
+          <div class="docs-code-block"><button class="copy-btn" data-i18n="docs.copy">复制</button><pre id="codeOpenai"></pre></div>
+        </section>
+
+        <!-- embeddings -->
+        <section class="docs-section" id="sec-embeddings">
+          <h2 data-i18n="docs.h2.embeddings">OpenAI Embeddings：/v1/embeddings</h2>
+          <p data-i18n="docs.embeddings.p1"></p>
+          <div class="docs-code-block"><button class="copy-btn" data-i18n="docs.copy">复制</button><pre id="codeEmbeddings"></pre></div>
+        </section>
+
+        <!-- speech -->
+        <section class="docs-section" id="sec-speech">
+          <h2 data-i18n="docs.h2.speech">OpenAI Audio Speech：/v1/audio/speech</h2>
+          <p data-i18n="docs.speech.p1"></p>
+          <div class="docs-code-block"><button class="copy-btn" data-i18n="docs.copy">复制</button><pre id="codeSpeech"></pre></div>
+        </section>
+
+        <!-- responses -->
+        <section class="docs-section" id="sec-responses">
+          <h2 data-i18n="docs.h2.responses">OpenAI Responses：/v1/responses</h2>
+          <p data-i18n="docs.responses.p1"></p>
+          <p data-i18n="docs.responses.stream"></p>
+          <div class="docs-code-block"><button class="copy-btn" data-i18n="docs.copy">复制</button><pre id="codeResponses"></pre></div>
+        </section>
+
+        <!-- gemini -->
+        <section class="docs-section" id="sec-gemini">
+          <h2 data-i18n="docs.h2.gemini">Gemini generateContent</h2>
+          <p data-i18n="docs.gemini.p1"></p>
+          <p data-i18n="docs.gemini.stream"></p>
+          <div class="docs-code-block"><button class="copy-btn" data-i18n="docs.copy">复制</button><pre id="codeGemini"></pre></div>
+        </section>
+
+        <!-- anthropic -->
+        <section class="docs-section" id="sec-anthropic">
+          <h2 data-i18n="docs.h2.anthropic">Anthropic Messages：/v1/messages</h2>
+          <p data-i18n="docs.anthropic.p1"></p>
+          <div class="docs-hint" data-i18n="docs.anthropic.hint"></div>
+          <div class="docs-code-block"><button class="copy-btn" data-i18n="docs.copy">复制</button><pre id="codeAnthropic"></pre></div>
+        </section>
+
+        <!-- openclaw -->
+        <section class="docs-section" id="sec-openclaw">
+          <h2 data-i18n="docs.h2.openclaw">OpenClaw 接入</h2>
+          <p data-i18n="docs.openclaw.intro"></p>
+          <h3 data-i18n="docs.openclaw.h3.roles">推荐模型分工</h3>
+          <ul>
+            <li data-i18n="docs.openclaw.role1"></li>
+            <li data-i18n="docs.openclaw.role2"></li>
+            <li data-i18n="docs.openclaw.role3"></li>
+            <li data-i18n="docs.openclaw.role4"></li>
+          </ul>
+          <div class="docs-hint" data-i18n="docs.openclaw.wireHint"></div>
+          <h3 data-i18n="docs.openclaw.h3.env">1. 准备环境变量</h3>
+          <p data-i18n="docs.openclaw.envDesc"></p>
+          <div class="docs-code-block"><button class="copy-btn" data-i18n="docs.copy">复制</button><pre id="codeOpenclawEnv"></pre></div>
+          <h3 data-i18n="docs.openclaw.h3.json">2. 供应商配置示例</h3>
+          <p data-i18n="docs.openclaw.jsonNote"></p>
+          <div class="docs-code-block"><button class="copy-btn" data-i18n="docs.copy">复制</button><pre id="codeOpenclawJson"></pre></div>
+          <h3 data-i18n="docs.openclaw.h3.apply">3. 应用配置</h3>
+          <p data-i18n="docs.openclaw.apply"></p>
+          <div class="docs-hint" data-i18n="docs.openclaw.warn"></div>
+        </section>
+
+        <!-- cursor -->
+        <section class="docs-section" id="sec-cursor">
+          <h2 data-i18n="docs.h2.agents.cursor">Cursor</h2>
+          <ol>
+            <li data-i18n="docs.cursor.1"></li>
+            <li data-i18n="docs.cursor.2"></li>
+            <li data-i18n="docs.cursor.3"></li>
+          </ol>
+        </section>
+
+        <!-- copilot -->
+        <section class="docs-section" id="sec-copilot">
+          <h2 data-i18n="docs.h2.agents.copilot">VS Code · GitHub Copilot</h2>
+          <p data-i18n="docs.copilot.p"></p>
+        </section>
+
+        <!-- codex -->
+        <section class="docs-section" id="sec-codex">
+          <h2 data-i18n="docs.h2.agents.codex">Codex 配置</h2>
+          <p data-i18n="docs.codex.p1"></p>
+          <ol>
+            <li data-i18n="docs.codex.li.install"></li>
+            <li data-i18n="docs.codex.li.openConfig"></li>
+            <li data-i18n="docs.codex.li.pasteToml"></li>
+            <li data-i18n="docs.codex.li.reload"></li>
+          </ol>
+          <h4 data-i18n="docs.codex.recommendTitle">推荐：GPT-5.4 · xhigh</h4>
+          <p class="small muted" data-i18n="docs.codex.recommendReason"></p>
+          <div class="docs-code-block"><button class="copy-btn" data-i18n="docs.copy">复制</button><pre id="codeCodexRecommend"></pre></div>
+          <h4 data-i18n="docs.codex.altTitle">其他可选模板</h4>
+          <div class="docs-code-block"><button class="copy-btn" data-i18n="docs.copy">复制</button><pre id="codeCodexAlt"></pre></div>
+          <div class="docs-hint" data-i18n="docs.codex.p2"></div>
+        </section>
+
+        <!-- continue -->
+        <section class="docs-section" id="sec-continue">
+          <h2 data-i18n="docs.h2.agents.continue">Continue（VS Code / JetBrains）</h2>
+          <ol>
+            <li data-i18n="docs.continue.1"></li>
+            <li data-i18n="docs.continue.2"></li>
+          </ol>
+        </section>
+
+        <!-- cline -->
+        <section class="docs-section" id="sec-cline">
+          <h2 data-i18n="docs.h2.agents.cline">Cline / Roo Code</h2>
+          <p data-i18n="docs.cline.p"></p>
+        </section>
+
+        <!-- windsurf -->
+        <section class="docs-section" id="sec-windsurf">
+          <h2 data-i18n="docs.h2.agents.windsurf">Windsurf / Codeium</h2>
+          <p data-i18n="docs.windsurf.p"></p>
+        </section>
+
+        <!-- claude-native -->
+        <section class="docs-section" id="sec-claude-native">
+          <h2 data-i18n="docs.h2.agents.claudeNative">Anthropic 原生协议客户端</h2>
+          <p data-i18n="docs.claudeNative.p"></p>
+        </section>
+
+        <!-- platforms -->
+        <section class="docs-section" id="sec-platforms">
+          <h2 data-i18n="docs.h2.platforms">自动化与编排</h2>
+          <p data-i18n="docs.agents.lead"></p>
+          <h3>Dify</h3>
+          <ol>
+            <li data-i18n="docs.dify.1"></li>
+            <li data-i18n="docs.dify.2"></li>
+            <li data-i18n="docs.dify.3"></li>
+          </ol>
+          <h3>n8n</h3>
+          <p data-i18n="docs.n8n.p"></p>
+          <h3>LangChain (Python)</h3>
+          <div class="docs-code-block"><button class="copy-btn" data-i18n="docs.copy">复制</button><pre id="codeLangchain"></pre></div>
+        </section>
+
+        <!-- faq -->
+        <section class="docs-section" id="sec-faq">
+          <h2 data-i18n="docs.h2.faq">常见问题</h2>
+          <ul>
+            <li data-i18n="docs.faq.401"></li>
+            <li data-i18n="docs.faq.model"></li>
+            <li data-i18n="docs.faq.route"></li>
+            <li data-i18n="docs.faq.openclaw"></li>
+          </ul>
+        </section>
+      </main>
+    </div>
+
+    <script src="js/i18n.js"></script>
+    <script src="js/docs.js"></script>
+  </body>
+</html>

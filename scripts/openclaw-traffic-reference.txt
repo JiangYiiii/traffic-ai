@@ -1,0 +1,28 @@
+OpenClaw × 本地 Traffic（备忘，不含密钥）
+========================================
+
+Traffic 供应商（models.providers.traffic）
+  baseUrl: http://localhost:8081/v1
+  api:    openai-completions
+  apiKey: 与本机 Traffic 控制台「本地测试使用」API Key 一致（勿提交仓库）
+
+推荐主模型（上游稳定、本机 usage_logs 曾连续成功）
+  agents.defaults.model.primary: traffic/claude-sonnet-4-6
+  备选 fallbacks: traffic/claude-haiku-4-5-20251001（已在本机验证 HTTP 200）
+  切勿把 traffic/qwen3.5-plus 或 flash 设为 fallback：DashScope 欠费时 upstream 400，
+  Traffic 对客户端为 502，会导致「主模型偶发失败后副模型全挂」+ OpenClaw 长时间重试（体感卡死）。
+
+模型列表同步（与 GET /v1/models 对齐）
+  TRAFFIC_PRIMARY_MODEL=claude-sonnet-4-6 \\
+    OPENCLAW_SYNC_RESTART=1 \\
+    python3 scripts/openclaw-sync-traffic-models.py
+
+配置备份位置
+  ~/.openclaw/backups/openclaw.json.<时间戳>.bak
+
+工具调用后卡顿时可尝试（已在一次恢复中用过）
+  agents.defaults.memorySearch.enabled = false        # 本地 embedding 缺依赖时后台易报错/争用
+  hooks.internal.entries.session-memory.enabled = false
+
+Feishu 插件 duplicate id 告警
+   bundled 与 ~/.openclaw/extensions/feishu 重复；任选一侧启用或收窄 plugins.allow。

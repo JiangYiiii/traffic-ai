@@ -1,0 +1,39 @@
+
+.observatory/manifest.json
+.observatory/ai-sessions.json
+.observatory/sessions/
+.observatory/progress.json
+.observatory/report.json
+.observatory/test-results.json
+.observatory/test-history.jsonl
+.observatory/pytest-report.json
+.observatory/*.corrupted
+
+
+# --- snapshot-collector: user-local (project init) ---
+.observatory/snapshots/data/
+/tmp/snapshot-*.json
+**/snapshot-collected-*.json
+# --- end snapshot-collector ---
+
+# Go 编译产物（仓库根目录与 bin）
+/control
+/gateway
+/traffic-ai
+/bin/control
+/bin/gateway
+
+# Cursor 本地日志
+.cursor/*.log
+
+# 本地环境与缓存
+.venv*/
+.cache/
+.run/
+
+# 密钥与本地配置
+.env
+.env.*
+!.env.example
+
+.DS_Store

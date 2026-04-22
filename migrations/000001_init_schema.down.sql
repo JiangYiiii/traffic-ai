@@ -1,0 +1,12 @@
+DROP TABLE IF EXISTS `rate_limit_rules`;
+DROP TABLE IF EXISTS `audit_logs`;
+DROP TABLE IF EXISTS `usage_logs`;
+DROP TABLE IF EXISTS `redeem_codes`;
+DROP TABLE IF EXISTS `balance_logs`;
+DROP TABLE IF EXISTS `user_balances`;
+DROP TABLE IF EXISTS `token_group_upstreams`;
+DROP TABLE IF EXISTS `token_groups`;
+DROP TABLE IF EXISTS `upstreams`;
+DROP TABLE IF EXISTS `models`;
+DROP TABLE IF EXISTS `api_keys`;
+DROP TABLE IF EXISTS `users`;
