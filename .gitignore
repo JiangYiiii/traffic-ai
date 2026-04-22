@@ -37,3 +37,7 @@
 !.env.example
 
 .DS_Store
+
+# Python
+**/__pycache__/
+*.py[cod]
