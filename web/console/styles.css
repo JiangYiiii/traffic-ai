@@ -363,6 +363,11 @@ a:focus-visible {
   min-width: 5.5rem;
 }
 
+.console-table-shell:has(#modelTableBody) {
+  overflow-x: auto;
+  overflow-y: visible;
+}
+
 .console-table-shell .table th.usage-note-column,
 .console-table-shell .table td.usage-note-cell {
   width: 16rem;

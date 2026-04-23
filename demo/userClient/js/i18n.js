@@ -360,7 +360,8 @@
       "action.enable": "启用",
       "action.delete": "删除",
       "app.deleteTokenConfirm": "确认删除令牌「{name}」？删除后可能无法找回。",
-      "app.tokenMissing": "服务端与本机均无该令牌明文（多为升级前创建）。请新建令牌。",
+      "app.tokenMissing":
+        "无法从此处复制：平台不保存完整密钥。若你曾在密码管理器/脚本里保存过 sk-…，可到下方「对话测试 → 明文令牌」粘贴；若已无处找回，请点「添加令牌」新建并保存。",
       "admin.deleteModelConfirm": "确认删除模型「{model}」？将一并移除该模型的定价与 API 线路配置，且不可恢复。",
       "admin.rechargeLogs": "充值记录（全站）",
       "admin.createAdmin": "创建普通管理员",
@@ -747,7 +748,8 @@
       "action.enable": "Enable",
       "action.delete": "Delete",
       "app.deleteTokenConfirm": 'Delete token "{name}"? You may not be able to recover it afterward.',
-      "app.tokenMissing": "No plaintext on server or in this browser (often pre-upgrade tokens). Create a new token.",
+      "app.tokenMissing":
+        "Cannot copy from here: full keys are not stored server-side. If you saved sk-… elsewhere, paste it under Chat test → Raw token; otherwise click Add token and store it safely.",
       "admin.deleteModelConfirm":
         'Delete model "{model}"? This removes its pricing and API route settings and cannot be undone.',
       "admin.rechargeLogs": "Recharge Logs (Global)",

@@ -1,5 +1,5 @@
 server:
-  control_port: 8080
+  control_port: 18080
   admin_control_port: 8083
   gateway_port: 8081
   mode: debug  # debug | release

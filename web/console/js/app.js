@@ -373,7 +373,7 @@ function renderChatTestTokenSelect(tokens, localTokenMap) {
     const plain = localTokenMap[id];
     const opt = document.createElement("option");
     opt.value = id;
-    const suffix = plain ? "" : "（未保存明文，请先复制）";
+    const suffix = plain ? "" : t("app.chatTestTokenNoLocalPlain");
     opt.textContent = `${name} [${group}]${suffix}`;
     sel.appendChild(opt);
   });
@@ -1198,7 +1198,10 @@ async function init() {
     const btn = document.getElementById("chatTestBtn");
 
     const tokenId = document.getElementById("chatTestTokenSelect").value;
-    const plainToken = loadLocalPlainTokens()[tokenId];
+    const manualEl = document.getElementById("chatTestTokenManual");
+    const manualPlain =
+      manualEl && typeof manualEl.value === "string" ? manualEl.value.trim() : "";
+    const plainToken = manualPlain || loadLocalPlainTokens()[tokenId];
     const model = document.getElementById("chatTestModel").value.trim();
     const prompt = document.getElementById("chatTestPrompt").value.trim();
     const rawApi = document.getElementById("chatTestApiMode").value;
@@ -1214,7 +1217,7 @@ async function init() {
     }
     if (!plainToken) {
       msgEl.className = "msg err";
-      msgEl.textContent = "该令牌明文未保存。请回到令牌列表点击复制。";
+      msgEl.textContent = t("app.chatTestNeedPlainOrPaste");
       return;
     }
     if (!model) {

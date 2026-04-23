@@ -345,6 +345,20 @@
                   <label for="chatTestTokenSelect" data-i18n="app.chatTestTokenLabel">令牌</label>
                   <select id="chatTestTokenSelect"></select>
                 </div>
+                <div class="console-chat-field console-chat-field--full">
+                  <label for="chatTestTokenManual" data-i18n="app.chatTestTokenManualLabel">明文令牌（可选）</label>
+                  <input
+                    id="chatTestTokenManual"
+                    type="password"
+                    autocomplete="off"
+                    spellcheck="false"
+                    data-i18n-placeholder="app.chatTestTokenManualPlaceholder"
+                    placeholder="若本机未缓存明文，在此粘贴完整 sk-…"
+                  />
+                  <p class="muted console-chat-file-hint" data-i18n="app.chatTestTokenManualHint">
+                    仅在本页浏览器内用于发测试请求，不会提交到保存令牌的接口。无存档时请新建令牌，或从密码管理器/环境变量中找回后再粘贴。
+                  </p>
+                </div>
                 <div class="console-chat-field">
                   <label for="chatTestApiMode" data-i18n="app.chatTestApiLabel">接口</label>
                   <select id="chatTestApiMode">

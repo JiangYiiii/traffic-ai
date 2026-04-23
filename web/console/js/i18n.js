@@ -128,6 +128,13 @@
       "app.chatTestDesc":
         "使用子令牌测试各接口。文本类可在「响应格式」中选择流式 (SSE) 或整段 JSON；Gemini 生图固定为非流式。",
       "app.chatTestTokenLabel": "令牌",
+      "app.chatTestTokenManualLabel": "明文令牌（可选）",
+      "app.chatTestTokenManualPlaceholder": "若本机未缓存明文，在此粘贴完整 sk-…",
+      "app.chatTestTokenManualHint":
+        "仅在本页浏览器内用于发测试请求，不会提交到保存令牌的接口。无存档时请新建令牌，或从密码管理器/环境变量中找回后再粘贴。",
+      "app.chatTestTokenNoLocalPlain": "（本机未缓存明文；可在下方粘贴完整 sk-…）",
+      "app.chatTestNeedPlainOrPaste":
+        "无法取得该令牌的明文：请在本页「明文令牌」中粘贴完整 sk-…，或新建令牌并在创建时保存。",
       "app.chatTestApiLabel": "接口",
       "app.chatTestApiOpenAI": "OpenAI 对话",
       "app.chatTestApiResponses": "OpenAI Responses",
@@ -374,7 +381,8 @@
       "action.enable": "启用",
       "action.delete": "删除",
       "app.deleteTokenConfirm": "确认删除令牌「{name}」？删除后可能无法找回。",
-      "app.tokenMissing": "服务端与本机均无该令牌明文（多为升级前创建）。请新建令牌。",
+      "app.tokenMissing":
+        "无法从此处复制：平台不保存完整密钥。若你曾在密码管理器/脚本里保存过 sk-…，可到下方「对话测试 → 明文令牌」粘贴；若已无处找回，请点「添加令牌」新建并保存。",
       "admin.deleteModelConfirm": "确认删除模型「{model}」？将一并移除该模型的定价与 API 线路配置，且不可恢复。",
       "admin.rechargeLogs": "充值记录（全站）",
       "admin.createAdmin": "创建普通管理员",
@@ -813,6 +821,13 @@
       "app.chatTestDesc":
         "Test each API with your sub-token. For text modes, choose streaming (SSE) or a single JSON response; Gemini image is always non-streaming.",
       "app.chatTestTokenLabel": "Token",
+      "app.chatTestTokenManualLabel": "Raw token (optional)",
+      "app.chatTestTokenManualPlaceholder": "Paste full sk-… if this browser has no cached plaintext",
+      "app.chatTestTokenManualHint":
+        "Used only in this page’s browser requests; it is not sent to the “save token” API. Create a new token or paste from your password manager / env if missing.",
+      "app.chatTestTokenNoLocalPlain": "(no plaintext cached here; paste full sk-… below)",
+      "app.chatTestNeedPlainOrPaste":
+        "No plaintext for this token: paste the full sk-… in “Raw token”, or create a new token and save it.",
       "app.chatTestApiLabel": "API",
       "app.chatTestApiOpenAI": "OpenAI chat",
       "app.chatTestApiResponses": "OpenAI Responses",
@@ -1059,7 +1074,8 @@
       "action.enable": "Enable",
       "action.delete": "Delete",
       "app.deleteTokenConfirm": 'Delete token "{name}"? You may not be able to recover it afterward.',
-      "app.tokenMissing": "No plaintext on server or in this browser (often pre-upgrade tokens). Create a new token.",
+      "app.tokenMissing":
+        "Cannot copy from here: full keys are not stored server-side. If you saved sk-… elsewhere, paste it under Chat test → Raw token; otherwise click Add token and store it safely.",
       "admin.deleteModelConfirm":
         'Delete model "{model}"? This removes its pricing and API route settings and cannot be undone.',
       "admin.rechargeLogs": "Recharge Logs (Global)",
