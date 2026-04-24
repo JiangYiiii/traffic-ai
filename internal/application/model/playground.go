@@ -15,6 +15,7 @@ import (
 	"github.com/trailyai/traffic-ai/pkg/crypto"
 	"github.com/trailyai/traffic-ai/pkg/errcode"
 	"github.com/trailyai/traffic-ai/pkg/logger"
+	"github.com/trailyai/traffic-ai/pkg/modelcompat"
 )
 
 // PlaygroundResult Playground 调试结果。
@@ -74,12 +75,18 @@ func (uc *UseCase) PlaygroundChat(ctx context.Context, modelID int64, messages [
 		maxTokens = 4096
 	}
 
-	reqBody, err := json.Marshal(map[string]interface{}{
+	// 根据模型选择正确的 token 限制参数名
+	// GPT-4o 2024-11-20+、o1、o3、GPT-5 使用 max_completion_tokens
+	// 其他模型使用 max_tokens
+	payload := map[string]interface{}{
 		"model":       m.ModelName,
 		"messages":    messages,
-		"max_tokens":  maxTokens,
 		"temperature": 0.3,
-	})
+	}
+	tokenParamName := modelcompat.TokenLimitParamName(m.ModelName)
+	payload[tokenParamName] = maxTokens
+
+	reqBody, err := json.Marshal(payload)
 	if err != nil {
 		return &PlaygroundResult{Success: false, Model: m.ModelName, Account: accountLabel(target), Error: fmt.Sprintf("build json: %v", err)}, nil
 	}

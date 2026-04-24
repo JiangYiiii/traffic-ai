@@ -16,6 +16,7 @@ import (
 	"github.com/trailyai/traffic-ai/pkg/crypto"
 	"github.com/trailyai/traffic-ai/pkg/errcode"
 	"github.com/trailyai/traffic-ai/pkg/logger"
+	"github.com/trailyai/traffic-ai/pkg/modelcompat"
 )
 
 type UseCase struct {
@@ -347,11 +348,17 @@ func (uc *UseCase) testModelAccountHTTP(ctx context.Context, m *domain.Model, ta
 		})
 		urlStr = upstreamurl.JoinPath(target.Endpoint, "/embeddings")
 	} else {
-		reqBody, _ = json.Marshal(map[string]interface{}{
-			"model":                 m.ModelName,
-			"messages":              []map[string]string{{"role": "user", "content": "Hi"}},
-			"max_completion_tokens": 5,
-		})
+		// 根据模型选择正确的 token 限制参数名
+		// GPT-4o 2024-11-20+、o1、o3、GPT-5 使用 max_completion_tokens
+		// 其他模型使用 max_tokens
+		payload := map[string]interface{}{
+			"model":    m.ModelName,
+			"messages": []map[string]string{{"role": "user", "content": "Hi"}},
+		}
+		tokenParamName := modelcompat.TokenLimitParamName(m.ModelName)
+		payload[tokenParamName] = 5
+
+		reqBody, _ = json.Marshal(payload)
 		urlStr = upstreamurl.JoinPath(target.Endpoint, "/chat/completions")
 	}
 

@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0.0",
-  "generated_at": "2026-04-23T03:04:59.220Z",
+  "generated_at": "2026-04-23T04:09:57.371Z",
   "overall_score": 50,
   "checks": [
     {
@@ -12,15 +12,15 @@
         "annotated_modules": 0,
         "missing": [
           "scripts/openclaw-sync-traffic-models.py",
-          "cmd/control/main.go",
           "cmd/gateway/main.go",
+          "cmd/control/main.go",
           "pkg/aidoc/aidoc.go",
-          "pkg/crypto/crypto.go",
           "pkg/errcode/errcode.go",
+          "pkg/crypto/crypto.go",
           "pkg/httputil/json_bind_error.go",
           "pkg/httputil/request_id.go",
           "pkg/jwt/jwt.go",
-          "pkg/logger/logger.go"
+          "pkg/response/response.go"
         ]
       }
     },
