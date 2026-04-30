@@ -1,5 +1,5 @@
 // Package gateway 数据面路由组装：多协议转发入口。
-// @ai_doc_flow 数据面路由: /v1/chat/completions + /v1/models + /v1/embeddings + /v1/messages 等
+// @ai_doc_flow 数据面路由: /v1/chat/completions + /v1/images/generations + /v1/models + /v1/embeddings + /v1/messages 等
 package gateway
 
 import (
@@ -75,6 +75,7 @@ func NewRouter(cfg *config.Config, db *sql.DB, rdb *redis.Client, metrics *Metri
 	{
 		v1.GET("/models", h.ListModels)
 		v1.POST("/chat/completions", h.ChatCompletions)
+		v1.POST("/images/generations", h.ImagesGenerations)
 		v1.POST("/embeddings", h.Embeddings)
 		v1.POST("/responses", h.Responses)
 		v1.POST("/audio/speech", h.AudioSpeech)

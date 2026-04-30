@@ -320,9 +320,26 @@ func connectivityProbeUsesEmbeddings(m *domain.Model, account *domain.ModelAccou
 	return false
 }
 
+// connectivityProbeUsesImageGeneration 控制台连通性探测是否应走 OpenAI / Azure OpenAI 兼容 /images/generations。
+// gpt-image / DALL·E 等部署在 Azure 上通常不支持 chat/completions，必须用图片接口探测。
+func connectivityProbeUsesImageGeneration(m *domain.Model, account *domain.ModelAccount) bool {
+	if strings.EqualFold(m.ModelType, "image") {
+		return true
+	}
+	if strings.EqualFold(account.Protocol, "image") {
+		return true
+	}
+	ln := strings.ToLower(m.ModelName)
+	if strings.HasPrefix(ln, "gpt-image") || strings.Contains(ln, "dall-e") {
+		return true
+	}
+	return false
+}
+
 // testModelAccountHTTP 对指定模型与账号发起一次最小探测请求（不落库）。
 // - 普通模型：POST …/chat/completions
 // - 向量模型（model_type=embedding）或 embeddings 协议账号：POST …/embeddings
+// - 图片模型：POST …/images/generations（与数据面 /v1/images/generations 一致）
 func (uc *UseCase) testModelAccountHTTP(ctx context.Context, m *domain.Model, target *domain.ModelAccount) *TestResult {
 	result := &TestResult{
 		Model:   m.ModelName,
@@ -341,12 +358,23 @@ func (uc *UseCase) testModelAccountHTTP(ctx context.Context, m *domain.Model, ta
 
 	var reqBody []byte
 	var urlStr string
+	httpTimeout := 15 * time.Second
 	if connectivityProbeUsesEmbeddings(m, target) {
 		reqBody, _ = json.Marshal(map[string]interface{}{
 			"model": m.ModelName,
 			"input": "traffic connectivity probe",
 		})
 		urlStr = upstreamurl.JoinPath(target.Endpoint, "/embeddings")
+	} else if connectivityProbeUsesImageGeneration(m, target) {
+		// Azure / 新版图片模型对最小分辨率有要求；quality=low 缩短耗时。
+		reqBody, _ = json.Marshal(map[string]interface{}{
+			"prompt":  "traffic connectivity probe",
+			"n":       1,
+			"size":    "1024x1024",
+			"quality": "low",
+		})
+		urlStr = upstreamurl.JoinPath(target.Endpoint, "/images/generations")
+		httpTimeout = 120 * time.Second
 	} else {
 		// 根据模型选择正确的 token 限制参数名
 		// GPT-4o 2024-11-20+、o1、o3、GPT-5 使用 max_completion_tokens
@@ -370,7 +398,7 @@ func (uc *UseCase) testModelAccountHTTP(ctx context.Context, m *domain.Model, ta
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Authorization", "Bearer "+plain)
 
-	client := &http.Client{Timeout: 15 * time.Second}
+	client := &http.Client{Timeout: httpTimeout}
 	start := time.Now()
 	resp, err := client.Do(httpReq)
 	result.LatencyMs = int(time.Since(start).Milliseconds())

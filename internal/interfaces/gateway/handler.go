@@ -85,6 +85,11 @@ func (h *Handler) ChatCompletions(c *gin.Context) {
 	}
 }
 
+// ImagesGenerations POST /v1/images/generations — OpenAI / Azure OpenAI Images API。
+func (h *Handler) ImagesGenerations(c *gin.Context) {
+	h.genericProxy(c, "openai", "/images/generations")
+}
+
 // Embeddings POST /v1/embeddings
 func (h *Handler) Embeddings(c *gin.Context) {
 	h.genericProxy(c, "embeddings", "/embeddings")
