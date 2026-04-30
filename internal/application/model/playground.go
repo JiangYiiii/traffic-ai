@@ -19,6 +19,13 @@ import (
 	"github.com/trailyai/traffic-ai/pkg/modelcompat"
 )
 
+// 上游 Playground 响应体大小上限。图片接口 JSON 内嵌完整 base64，曾用 64KB 截断会导致
+// 「unexpected end of JSON input」且管理端无法展示缩略图。
+const (
+	maxPlaygroundGenericBody int64 = 4 << 20 // 4MB：chat / embeddings
+	maxPlaygroundImageBody   int64 = 32 << 20 // 32MB：images/generations（含 b64_json）
+)
+
 // PlaygroundResult Playground 调试结果。
 type PlaygroundResult struct {
 	Success        bool   `json:"success"`
@@ -206,7 +213,11 @@ func (uc *UseCase) playgroundDoJSON(ctx context.Context, m *domain.Model, target
 		return out, nil
 	}
 	defer resp.Body.Close()
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, 65536))
+	body, errRead := io.ReadAll(http.MaxBytesReader(nil, resp.Body, maxPlaygroundGenericBody))
+	if errRead != nil {
+		out.Error = fmt.Sprintf("read body: %v", errRead)
+		return out, nil
+	}
 	out.HTTPStatus = resp.StatusCode
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		out.Error = fmt.Sprintf("HTTP %d", resp.StatusCode)
@@ -248,7 +259,11 @@ func (uc *UseCase) playgroundDoImage(ctx context.Context, m *domain.Model, targe
 		return out, nil
 	}
 	defer resp.Body.Close()
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, 65536))
+	body, errRead := io.ReadAll(http.MaxBytesReader(nil, resp.Body, maxPlaygroundImageBody))
+	if errRead != nil {
+		out.Error = fmt.Sprintf("read body: %v", errRead)
+		return out, nil
+	}
 	out.HTTPStatus = resp.StatusCode
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		out.Error = fmt.Sprintf("HTTP %d", resp.StatusCode)
