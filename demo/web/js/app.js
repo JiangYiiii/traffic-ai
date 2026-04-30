@@ -1,16 +1,37 @@
-const token = localStorage.getItem("accessToken");
-if (!token) window.location.href = "/login.html";
 const t = (k) => (window.I18N ? window.I18N.t(k) : k);
+
+function getAccessToken() {
+  return localStorage.getItem("accessToken");
+}
+
+if (!getAccessToken()) window.location.href = "/login.html";
+
 let currentUserGroup = "default";
 let cachedProfile = null;
-const CHAT_API_BASE = "https://api.4tk.ai";
-/** 最近一次 /me/tokens 结果，供控制台聊天测试取明文 */
 let cachedMeTokens = [];
+
+function gatewayBase() {
+  return `${window.location.protocol}//${window.location.hostname}:8081`;
+}
+
+function adminConsoleHref() {
+  const m = document.querySelector('meta[name="traffic-ai-admin-port"]');
+  if (!m?.content) return "/admin.html";
+  const port = m.content.trim();
+  return `${window.location.protocol}//${window.location.hostname}:${port}/admin.html`;
+}
+
+function pickTokenField(row, camel, snake) {
+  if (row && Object.prototype.hasOwnProperty.call(row, camel)) return row[camel];
+  if (row && Object.prototype.hasOwnProperty.call(row, snake)) return row[snake];
+  return undefined;
+}
 
 const TOKEN_EYE_SVG =
   '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
 
 async function api(path, options = {}) {
+  const token = getAccessToken();
   const resp = await fetch(path, {
     ...options,
     headers: {
@@ -24,9 +45,11 @@ async function api(path, options = {}) {
     window.location.href = "/login.html";
     return null;
   }
-  const data = await resp.json().catch(() => ({}));
-  if (!resp.ok) throw new Error(data.error || t("common.requestFailed"));
-  return data;
+  const body = await resp.json().catch(() => ({}));
+  if (typeof body.code !== "number" || body.code !== 0) {
+    throw new Error(body.message || t("common.requestFailed"));
+  }
+  return body.data;
 }
 
 /** 微美元整数字符串 -> $x.xxxxxx */
@@ -96,18 +119,25 @@ function syncProfileMeta(profile = cachedProfile) {
   if (group !== "default") {
     metaParts.push(`${t("common.group")}: ${group}`);
   }
-  metaParts.push(`${t("common.inviteCode")}: ${profile.inviteCode || "-"}`);
+  metaParts.push(`${t("common.inviteCode")}: ${profile.inviteCode || profile.invite_code || "-"}`);
   setText("userMeta", metaParts.join(" | "));
   setText("heroEmail", profile.email || "-");
   setText("heroGroup", `${t("common.group")}: ${group}`);
-  setText("heroInviteCode", `${t("common.inviteCode")}: ${profile.inviteCode || "-"}`);
+  setText("heroInviteCode", `${t("common.inviteCode")}: ${profile.inviteCode || profile.invite_code || "-"}`);
 
   const adminLink = document.getElementById("adminLinkBtn");
   const superAdminLink = document.getElementById("superAdminLinkBtn");
-  if (adminLink) adminLink.style.display = group === "admin" ? "inline-flex" : "none";
-  if (superAdminLink) superAdminLink.style.display = group === "super_admin" ? "inline-flex" : "none";
-  if (adminLink) adminLink.textContent = t("nav.admin");
-  if (superAdminLink) superAdminLink.textContent = t("nav.superAdmin");
+  const role = profile.role || "";
+  if (adminLink) {
+    adminLink.style.display = role === "admin" ? "inline-flex" : "none";
+    adminLink.href = adminConsoleHref();
+    adminLink.textContent = t("nav.admin");
+  }
+  if (superAdminLink) {
+    superAdminLink.style.display = role === "super_admin" ? "inline-flex" : "none";
+    superAdminLink.href = adminConsoleHref();
+    superAdminLink.textContent = t("nav.superAdmin");
+  }
 }
 
 function maskTokenPreview(prefix) {
@@ -141,24 +171,39 @@ function syncBalanceAlertSummary() {
 async function loadProfile() {
   const data = await api("/account/profile");
   if (!data) return;
-  const p = data.profile;
+
+  const p = data.profile || data;
   const d = data.dashboard;
   currentUserGroup = p.group || "default";
   cachedProfile = p;
   syncProfileMeta(p);
-  setText("kpiBalance", usdFromMicroStr(d.balanceMicroUsd));
-  setText("kpiConsumed", usdFromMicroStr(d.totalConsumedMicroUsd));
-  setText("kpiCalls", String(d.totalCalls));
-  setText("kpiTokens", String(d.activeTokenCount));
+
+  if (d) {
+    setText("kpiBalance", usdFromMicroStr(d.balanceMicroUsd));
+    setText("kpiConsumed", usdFromMicroStr(d.totalConsumedMicroUsd));
+    setText("kpiCalls", String(d.totalCalls ?? "-"));
+    setText("kpiTokens", String(d.activeTokenCount ?? "-"));
+  } else {
+    setText("kpiBalance", usdFromMicroStr(String(p.balance || 0)));
+    setText("kpiConsumed", "-");
+    setText("kpiCalls", "-");
+    setText("kpiTokens", "-");
+  }
 
   const ba = data.balanceAlert;
+  const elEn = document.getElementById("balanceAlertEnabled");
+  const elUsd = document.getElementById("balanceAlertUsd");
   if (ba) {
-    const elEn = document.getElementById("balanceAlertEnabled");
-    const elUsd = document.getElementById("balanceAlertUsd");
     if (elEn) elEn.checked = ba.enabled !== false;
     if (elUsd) {
       const micro = BigInt(ba.thresholdMicroUsd || "0");
       const usd = Number(micro) / 1_000_000;
+      elUsd.value = Number.isFinite(usd) && usd > 0 ? String(usd) : "10";
+    }
+  } else {
+    if (elEn) elEn.checked = p.alert_enabled !== false;
+    if (elUsd) {
+      const usd = Number(p.alert_threshold);
       elUsd.value = Number.isFinite(usd) && usd > 0 ? String(usd) : "10";
     }
   }
@@ -167,39 +212,50 @@ async function loadProfile() {
 
 async function loadTokens() {
   const rows = await api("/me/tokens");
-  if (!rows) return;
-  cachedMeTokens = rows;
+  if (rows === undefined || rows === null) return;
+  const list = Array.isArray(rows) ? rows : [];
+  cachedMeTokens = list;
   const tbody = document.getElementById("tokenTable");
   tbody.innerHTML = "";
 
   const localTokenMap = loadLocalPlainTokens();
-  renderChatTestTokenSelect(rows, localTokenMap);
-  if (!rows.length) {
+  renderChatTestTokenSelect(list, localTokenMap);
+  if (!list.length) {
     renderEmptyTableRow(tbody, 6, t("app.emptyTokens"));
     return;
   }
 
-  rows.forEach((r) => {
-    const plain = r.token ?? localTokenMap[r.id];
+  list.forEach((r) => {
+    const id = pickTokenField(r, "id", "id");
+    const name = pickTokenField(r, "name", "name");
+    const tokenGroup = pickTokenField(r, "tokenGroup", "token_group") ?? "-";
+    const keyDisplay = pickTokenField(r, "keyDisplay", "key_display");
+    const keyPrefix = pickTokenField(r, "keyPrefix", "key_prefix") || pickTokenField(r, "tokenPrefix", "token_prefix");
+    const isActive = pickTokenField(r, "isActive", "is_active");
+    const lastUsed = pickTokenField(r, "lastUsedAt", "last_used_at");
+
+    const plain = localTokenMap[id];
+    const maskedText = keyDisplay || maskTokenPreview(keyPrefix || (plain ? plain.slice(0, 10) : ""));
+
     const tr = document.createElement("tr");
     const secretCell = `<td class="token-full-cell${plain ? "" : " token-full-cell--readonly"}">
         <div class="token-full-wrap">
-          <span class="token-plain-masked muted">${maskTokenPreview(r.tokenPrefix || plain?.slice(0, 10) || "")}</span>
+          <span class="token-plain-masked muted">${escapeHtml(maskedText)}</span>
           <code class="token-plain-full"></code>
         </div>
-        ${plain ? `<button type="button" class="ghost token-eye-btn" data-token-id="${r.id}" title="${t("app.tokenShowPlain")}" aria-label="${t("app.tokenShowPlain")}" aria-pressed="false">${TOKEN_EYE_SVG}</button>` : ""}
+        ${plain ? `<button type="button" class="ghost token-eye-btn" data-token-id="${escapeHtml(id)}" title="${escapeHtml(t("app.tokenShowPlain"))}" aria-label="${escapeHtml(t("app.tokenShowPlain"))}" aria-pressed="false">${TOKEN_EYE_SVG}</button>` : ""}
       </td>`;
     tr.innerHTML = `
-      <td>${r.name}</td>
-      <td>${r.tokenGroup || "-"}</td>
+      <td>${escapeHtml(name)}</td>
+      <td>${escapeHtml(String(tokenGroup))}</td>
       ${secretCell}
-      <td><span class="pill ${r.isActive ? "ok" : "off"}">${r.isActive ? t("status.enabled") : t("status.disabled")}</span></td>
-      <td>${fmtTime(r.lastUsedAt)}</td>
+      <td><span class="pill ${isActive ? "ok" : "off"}">${isActive ? t("status.enabled") : t("status.disabled")}</span></td>
+      <td>${fmtTime(lastUsed)}</td>
       <td>
         <div class="table-action-group table-action-group--token">
-          ${plain ? `<button type="button" data-copy="${r.id}" class="ghost">${t("common.copy")}</button>` : `<span class="muted">${t("app.tokenMissing")}</span>`}
-          ${r.isActive ? `<button type="button" data-disable="${r.id}" class="ghost">${t("action.disable")}</button>` : `<button type="button" data-enable="${r.id}" class="ghost">${t("action.enable")}</button>`}
-          <button type="button" data-delete="${r.id}" class="ghost">${t("action.delete")}</button>
+          ${plain ? `<button type="button" data-copy="${escapeHtml(id)}" class="ghost">${t("common.copy")}</button>` : `<span class="muted">${t("app.tokenMissing")}</span>`}
+          ${isActive ? `<button type="button" data-disable="${escapeHtml(id)}" class="ghost">${t("action.disable")}</button>` : `<button type="button" data-enable="${escapeHtml(id)}" class="ghost">${t("action.enable")}</button>`}
+          <button type="button" data-delete="${escapeHtml(id)}" class="ghost">${t("action.delete")}</button>
         </div>
       </td>
     `;
@@ -218,8 +274,7 @@ async function loadTokens() {
   tbody.querySelectorAll("button[data-copy]").forEach((btn) => {
     btn.addEventListener("click", async () => {
       const id = btn.getAttribute("data-copy");
-      const row = cachedMeTokens.find((x) => x.id === id);
-      const plain = row?.token ?? loadLocalPlainTokens()[id];
+      const plain = loadLocalPlainTokens()[id];
       if (!plain) {
         await UiDialog.alert(t("app.tokenMissing"));
         return;
@@ -257,8 +312,8 @@ async function loadTokens() {
   tbody.querySelectorAll("button[data-delete]").forEach((btn) => {
     btn.addEventListener("click", async () => {
       const id = btn.getAttribute("data-delete");
-      const row = cachedMeTokens.find((x) => x.id === id);
-      const name = row?.name || id;
+      const row = cachedMeTokens.find((x) => String(pickTokenField(x, "id", "id")) === String(id));
+      const name = (row && pickTokenField(row, "name", "name")) || id;
       const msg = t("app.deleteTokenConfirm").replace("{name}", name);
       if (!(await UiDialog.confirmTwoStep(msg, t("common.deleteConfirmSecond")))) return;
       try {
@@ -277,7 +332,7 @@ function renderChatTestTokenSelect(tokens, localTokenMap) {
   if (!sel) return;
   const previousValue = sel.value;
   sel.innerHTML = "";
-  const activeTokens = (tokens || []).filter((t) => t.isActive);
+  const activeTokens = (tokens || []).filter((tok) => pickTokenField(tok, "isActive", "is_active"));
   const ordered = activeTokens.length ? activeTokens : tokens || [];
 
   if (!ordered.length) {
@@ -290,12 +345,15 @@ function renderChatTestTokenSelect(tokens, localTokenMap) {
     return;
   }
 
-  ordered.forEach((t) => {
-    const plain = t.token ?? localTokenMap[t.id];
+  ordered.forEach((tok) => {
+    const id = pickTokenField(tok, "id", "id");
+    const name = pickTokenField(tok, "name", "name");
+    const group = pickTokenField(tok, "tokenGroup", "token_group") || "default";
+    const plain = localTokenMap[id];
     const opt = document.createElement("option");
-    opt.value = t.id;
+    opt.value = id;
     const suffix = plain ? "" : "（未保存明文，请先复制）";
-    opt.textContent = `${t.name} [${t.tokenGroup || "default"}]${suffix}`;
+    opt.textContent = `${name} [${group}]${suffix}`;
     sel.appendChild(opt);
   });
 
@@ -342,8 +400,7 @@ async function handleTokenEyeClick(ev) {
   const fullEl = cell.querySelector(".token-plain-full");
   const willReveal = !cell.classList.contains("revealed");
   if (willReveal) {
-    const row = cachedMeTokens.find((x) => x.id === id);
-    const plain = row?.token ?? loadLocalPlainTokens()[id];
+    const plain = loadLocalPlainTokens()[id];
     if (!plain) {
       await UiDialog.alert(t("app.tokenMissing"));
       return;
@@ -447,15 +504,17 @@ function setupCreateTokenModal() {
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
     const name = nameInput.value.trim();
-    const tokenGroup = tokenGroupInput.value.trim() || "default";
+    const token_group = tokenGroupInput.value.trim() || "default";
     try {
       const data = await api("/me/tokens", {
         method: "POST",
-        body: JSON.stringify({ name, tokenGroup }),
+        body: JSON.stringify({ name, token_group }),
       });
-      saveLocalPlainToken(data.id, data.token);
+      const plainKey = data.key || data.token;
+      const newId = data.id;
+      if (plainKey && newId) saveLocalPlainToken(String(newId), plainKey);
       closeCreateTokenModal();
-      openNewTokenModal(data.token);
+      if (plainKey) openNewTokenModal(plainKey);
       await loadTokens();
       await loadProfile();
     } catch (err) {
@@ -540,13 +599,18 @@ async function loadUsage() {
   const params = new URLSearchParams({ limit: "50" });
   if (stream) params.set("stream", stream);
   if (model) params.set("model", model);
-  const rows = await api(`/me/usage-logs?${params.toString()}`);
-  if (!rows) return;
+  let raw;
+  try {
+    raw = await api(`/me/usage-logs?${params.toString()}`);
+  } catch {
+    raw = [];
+  }
+  const rows = Array.isArray(raw) ? raw : (raw?.list || []);
   const tbody = document.getElementById("usageTable");
   disposeBootstrapTooltips(tbody);
   tbody.innerHTML = "";
   if (!rows.length) {
-    renderEmptyTableRow(tbody, 15, t("app.emptyUsage"));
+    renderEmptyTableRow(tbody, 16, t("app.emptyUsage"));
     return;
   }
   rows.forEach((r) => {
@@ -567,6 +631,7 @@ async function loadUsage() {
       <td>${r.stream ? t("app.streamTrue") : t("app.streamFalse")}</td>
       <td>${r.promptTokens}</td>
       <td>${r.completionTokens}</td>
+      <td>${r.totalTokens ?? ((Number(r.promptTokens) || 0) + (Number(r.completionTokens) || 0))}</td>
       <td>${r.cacheCreationTokens ?? 0}</td>
       <td>${r.cacheReadTokens ?? 0}</td>
       <td title="micro: ${r.costMicroUsd}">${costDisp}</td>
@@ -579,31 +644,45 @@ async function loadUsage() {
 }
 
 async function loadBalanceLogs() {
-  const rows = await api("/me/balance/logs?limit=50");
-  if (!rows) return;
+  const raw = await api("/me/balance/logs?page=1&page_size=50");
+  if (!raw) return;
+  const list = raw.list || (Array.isArray(raw) ? raw : []);
   const tbody = document.getElementById("balanceTable");
   tbody.innerHTML = "";
-  if (!rows.length) {
+  if (!list.length) {
     renderEmptyTableRow(tbody, 5, t("app.emptyBalanceLogs"));
     return;
   }
-  rows.forEach((r) => {
-    const ch = BigInt(r.changeMicroUsd);
+  list.forEach((r) => {
+    const amount = pickTokenField(r, "amount", "amount") ?? pickTokenField(r, "changeMicroUsd", "change_micro_usd") ?? "0";
+    const before = pickTokenField(r, "balanceBefore", "balance_before") ?? pickTokenField(r, "balanceBeforeMicroUsd", "balance_before_micro_usd") ?? "0";
+    const after = pickTokenField(r, "balanceAfter", "balance_after") ?? pickTokenField(r, "balanceAfterMicroUsd", "balance_after_micro_usd") ?? "0";
+    const created = pickTokenField(r, "createdAt", "created_at");
+    const reasonType = pickTokenField(r, "reasonType", "reason_type");
+
+    const amountStr = String(amount);
+    let ch = 0n;
+    try { ch = BigInt(amountStr); } catch { ch = 0n; }
     const tr = document.createElement("tr");
     tr.innerHTML = `
-      <td>${fmtTime(r.createdAt)}</td>
-      <td>${ch > 0n ? "+" : ""}${usdFromMicroStr(r.changeMicroUsd)}</td>
-      <td>${usdFromMicroStr(r.balanceBeforeMicroUsd)}</td>
-      <td>${usdFromMicroStr(r.balanceAfterMicroUsd)}</td>
-      <td>${r.reasonType}</td>
+      <td>${fmtTime(created)}</td>
+      <td>${ch > 0n ? "+" : ""}${usdFromMicroStr(amountStr)}</td>
+      <td>${usdFromMicroStr(String(before))}</td>
+      <td>${usdFromMicroStr(String(after))}</td>
+      <td>${reasonType || "-"}</td>
     `;
     tbody.appendChild(tr);
   });
 }
 
 async function loadPricing() {
-  const rows = await api("/me/model-pricing");
-  if (!rows) return;
+  let raw;
+  try {
+    raw = await api("/me/model-pricing");
+  } catch {
+    raw = [];
+  }
+  const rows = Array.isArray(raw) ? raw : (raw?.list || []);
   const tbody = document.getElementById("pricingTable");
   tbody.innerHTML = "";
   const modelsDl = document.getElementById("chatPricingModels");
@@ -678,6 +757,8 @@ function normalizeChatTestApiMode(raw) {
   if (raw === "gemini-chat") return "gemini-chat";
   if (raw === "anthropic") return "anthropic";
   if (raw === "responses") return "responses";
+  if (raw === "openai-image") return "openai-image";
+  if (raw === "openai-embeddings") return "openai-embeddings";
   return "openai";
 }
 
@@ -690,11 +771,19 @@ function syncChatTestApiModeUi() {
   if (!modeEl || !gemEl || !modelEl || !promptEl) return;
   const mode = normalizeChatTestApiMode(modeEl.value);
   gemEl.hidden = mode !== "gemini-image";
-  if (streamWrap) streamWrap.hidden = mode === "gemini-image";
+  if (streamWrap)
+    streamWrap.hidden =
+      mode === "gemini-image" || mode === "openai-image" || mode === "openai-embeddings";
 
   let modelPlaceholderKey = "app.chatTestModelPlaceholder";
   let promptPlaceholderKey = "app.chatTestPromptPlaceholder";
-  if (mode === "gemini-image") {
+  if (mode === "openai-image") {
+    modelPlaceholderKey = "app.chatTestModelPlaceholderOpenAIImage";
+    promptPlaceholderKey = "app.chatTestPromptPlaceholderOpenAIImage";
+  } else if (mode === "openai-embeddings") {
+    modelPlaceholderKey = "app.chatTestModelPlaceholderOpenAIEmbed";
+    promptPlaceholderKey = "app.chatTestPromptPlaceholderOpenAIEmbed";
+  } else if (mode === "gemini-image") {
     modelPlaceholderKey = "app.chatTestModelPlaceholderGemini";
     promptPlaceholderKey = "app.chatTestPromptPlaceholderGemini";
   } else if (mode === "gemini-chat") {
@@ -803,6 +892,55 @@ function renderChatTestOutputOpenAI(outEl, text) {
   const pre = document.createElement("pre");
   pre.className = "chat-test-json-pre";
   pre.textContent = text;
+  outEl.appendChild(pre);
+}
+
+function renderChatTestOutputOpenAIImage(outEl, data) {
+  outEl.replaceChildren();
+  const d0 = data?.data?.[0];
+  const b64 = d0?.b64_json;
+  const url = d0?.url;
+  if (url) {
+    const a = document.createElement("a");
+    a.href = url;
+    a.target = "_blank";
+    a.rel = "noopener noreferrer";
+    a.textContent = url;
+    outEl.appendChild(a);
+    return;
+  }
+  if (b64) {
+    const img = document.createElement("img");
+    img.src = `data:image/png;base64,${b64}`;
+    img.alt = "generated";
+    img.style.maxWidth = "100%";
+    img.style.height = "auto";
+    outEl.appendChild(img);
+    const note = document.createElement("pre");
+    note.className = "chat-test-json-pre";
+    note.textContent = `base64 length: ${b64.length}`;
+    outEl.appendChild(note);
+    return;
+  }
+  const pre = document.createElement("pre");
+  pre.className = "chat-test-json-pre";
+  pre.textContent = JSON.stringify(data, null, 2);
+  outEl.appendChild(pre);
+}
+
+function renderChatTestOutputOpenAIEmbedding(outEl, data) {
+  outEl.replaceChildren();
+  const emb = data?.data?.[0]?.embedding;
+  const pre = document.createElement("pre");
+  pre.className = "chat-test-json-pre";
+  if (Array.isArray(emb)) {
+    const preview = emb.slice(0, 16);
+    pre.textContent = `dimensions: ${emb.length}\npreview: [${preview.join(", ")}]${
+      emb.length > 16 ? "\n…" : ""
+    }`;
+  } else {
+    pre.textContent = JSON.stringify(data, null, 2);
+  }
   outEl.appendChild(pre);
 }
 
@@ -978,15 +1116,18 @@ async function init() {
     const btn = document.getElementById("chatTestBtn");
 
     const tokenId = document.getElementById("chatTestTokenSelect").value;
-    const row = cachedMeTokens.find((x) => x.id === tokenId);
-    const plainToken = row?.token ?? loadLocalPlainTokens()[tokenId];
+    const plainToken = loadLocalPlainTokens()[tokenId];
     const model = document.getElementById("chatTestModel").value.trim();
     const prompt = document.getElementById("chatTestPrompt").value.trim();
     const rawApi = document.getElementById("chatTestApiMode").value;
     const apiMode = normalizeChatTestApiMode(rawApi);
     const streamModeEl = document.getElementById("chatTestStreamMode");
     const wantSse =
-      apiMode !== "gemini-image" && streamModeEl && String(streamModeEl.value) === "sse";
+      apiMode !== "gemini-image" &&
+      apiMode !== "openai-image" &&
+      apiMode !== "openai-embeddings" &&
+      streamModeEl &&
+      String(streamModeEl.value) === "sse";
 
     if (!tokenId) {
       msgEl.className = "msg err";
@@ -1003,7 +1144,7 @@ async function init() {
       msgEl.textContent = "请输入要测试的模型";
       return;
     }
-    if (apiMode !== "gemini-image" && !prompt) {
+    if (apiMode !== "gemini-image" && apiMode !== "openai-image" && apiMode !== "openai-embeddings" && !prompt) {
       msgEl.className = "msg err";
       msgEl.textContent = "请输入消息内容";
       return;
@@ -1015,7 +1156,7 @@ async function init() {
     msgEl.textContent = "发送中...";
 
     const timeoutMs =
-      apiMode === "gemini-image"
+      apiMode === "gemini-image" || apiMode === "openai-image"
         ? 300_000
         : wantSse
           ? CHAT_TEST_STREAM_TIMEOUT_MS
@@ -1052,6 +1193,21 @@ async function init() {
           imageConfig: { aspectRatio: aspect, imageSize },
           responseModalities: ["IMAGE"],
         },
+      };
+    } else if (apiMode === "openai-image") {
+      path = "/v1/images/generations";
+      payload = {
+        model,
+        prompt: prompt || "minimal abstract soft gradient",
+        n: 1,
+        size: "1024x1024",
+        quality: "low",
+      };
+    } else if (apiMode === "openai-embeddings") {
+      path = "/v1/embeddings";
+      payload = {
+        model,
+        input: prompt || "connectivity test",
       };
     } else if (apiMode === "gemini-chat") {
       path = wantSse
@@ -1107,14 +1263,13 @@ async function init() {
 
     try {
       let resp;
-      let usedBase = CHAT_API_BASE;
+      const gwBase = gatewayBase();
       try {
-        resp = await doFetch(`${CHAT_API_BASE}${path}`);
+        resp = await doFetch(`${gwBase}${path}`);
       } catch (e) {
-        usedBase = window.location.origin;
         resp = await doFetch(`${window.location.origin}${path}`);
         msgEl.className = "msg";
-        msgEl.textContent = `提示：跨域请求失败，已回退到同源 ${usedBase} 发送测试。`;
+        msgEl.textContent = `提示：网关请求失败，已回退到同源发送测试。`;
       }
 
       if (!resp.ok) {
@@ -1161,6 +1316,10 @@ async function init() {
 
         if (apiMode === "gemini-image") {
           renderChatTestOutputGeminiImage(outEl, data);
+        } else if (apiMode === "openai-image") {
+          renderChatTestOutputOpenAIImage(outEl, data);
+        } else if (apiMode === "openai-embeddings") {
+          renderChatTestOutputOpenAIEmbedding(outEl, data);
         } else if (apiMode === "gemini-chat") {
           const content = geminiAssistantPlainText(data) || geminiResponseJsonForPre(data);
           renderChatTestOutputOpenAI(outEl, content);
@@ -1184,7 +1343,7 @@ async function init() {
       msgEl.className = "msg err";
       if (err && (err.name === "AbortError" || /aborted/i.test(String(err.message || "")))) {
         const sec = String(timeoutMs / 1000);
-        if (apiMode === "gemini-image") {
+        if (apiMode === "gemini-image" || apiMode === "openai-image") {
           msgEl.textContent = t("app.chatTestTimeoutGemini").replace(/\{seconds\}/g, sec);
         } else if (wantSse) {
           msgEl.textContent = t("app.chatTestTimeoutStream").replace(/\{seconds\}/g, sec);
@@ -1207,7 +1366,7 @@ async function init() {
 
   document.getElementById("balanceAlertForm").addEventListener("submit", async (e) => {
     e.preventDefault();
-    const balanceAlertEnabled = document.getElementById("balanceAlertEnabled").checked;
+    const enabled = document.getElementById("balanceAlertEnabled").checked;
     const balanceAlertUsd = Number(document.getElementById("balanceAlertUsd").value);
     const msg = document.getElementById("balanceAlertMsg");
     if (!Number.isFinite(balanceAlertUsd) || balanceAlertUsd < 0.01) {
@@ -1216,9 +1375,10 @@ async function init() {
       return;
     }
     try {
+      const threshold = usdInputToMicroStr(balanceAlertUsd);
       await api("/me/balance-alert", {
         method: "PATCH",
-        body: JSON.stringify({ balanceAlertEnabled, balanceAlertUsd }),
+        body: JSON.stringify({ enabled, threshold: Number(threshold) }),
       });
       msg.className = "msg ok";
       msg.textContent = t("app.balanceAlertSaved");
@@ -1234,7 +1394,7 @@ async function init() {
     el.addEventListener("change", () => {
       queueMicrotask(() => {
         syncBalanceAlertSummary();
-        syncProfileMeta();
+        syncProfileMeta(cachedProfile);
         syncChatTestApiModeUi();
         syncGeminiImageFileSummary();
       });

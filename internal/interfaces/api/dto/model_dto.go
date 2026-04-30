@@ -54,7 +54,7 @@ type BatchUpdateModelsReq struct {
 	PerRequestPrice int64   `json:"per_request_price"`
 }
 
-// PlaygroundReq 管理端 Playground：向该模型绑定的模型账号发一条 chat/completions。
+// PlaygroundReq 管理端 Playground：按模型 model_type 转发至 chat / embeddings / images（见 PlaygroundChat）。
 type PlaygroundReq struct {
 	Messages  []map[string]string `json:"messages"`
 	MaxTokens int                 `json:"max_tokens"`

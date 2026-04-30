@@ -145,7 +145,7 @@
           <section class="card mb-4" id="playgroundSection">
             <div class="card-body">
               <h2 class="h5 mb-2" data-i18n="admin.playground.title">Playground</h2>
-              <p class="text-muted small mb-3" data-i18n="admin.playground.hint">
+              <p id="pgHint" class="text-muted small mb-3" data-i18n="admin.playground.hint">
                 向已配置上游的模型发送一条对话请求，用于快速验证连通与模型 ID 是否正确（走管理端代理，不经过用户网关计费）。
               </p>
               <div class="row g-2 align-items-end">
@@ -155,7 +155,7 @@
                     <option value="" data-i18n="admin.playground.pickModelPh">请选择模型</option>
                   </select>
                 </div>
-                <div class="col-md-2">
+                <div class="col-md-2" id="pgMaxTokensWrap">
                   <label class="form-label" for="pgMaxTokens" data-i18n="admin.playground.maxTokens">Max tokens</label>
                   <input type="number" class="form-control form-control-sm" id="pgMaxTokens" min="1" max="4096" value="256" />
                 </div>
@@ -163,7 +163,7 @@
                   <button type="button" class="btn btn-primary btn-sm" id="btnPgSend" data-i18n="admin.playground.send">发送</button>
                 </div>
                 <div class="col-12">
-                  <label class="form-label" for="pgUserMsg" data-i18n="admin.playground.userMsg">用户消息</label>
+                  <label id="pgUserLabel" class="form-label" for="pgUserMsg" data-i18n="admin.playground.userMsg">用户消息</label>
                   <textarea
                     id="pgUserMsg"
                     class="form-control form-control-sm"
@@ -172,8 +172,9 @@
                     placeholder="用一句话描述你想测试的内容"
                   ></textarea>
                 </div>
+                <div id="pgImagePreview" class="col-12" hidden></div>
                 <div class="col-12">
-                  <span class="form-label d-block" data-i18n="admin.playground.assistant">助手回复</span>
+                  <span id="pgOutLabel" class="form-label d-block" data-i18n="admin.playground.assistant">助手回复</span>
                   <pre
                     id="pgOut"
                     class="border rounded p-2 bg-light small mb-0 text-break"

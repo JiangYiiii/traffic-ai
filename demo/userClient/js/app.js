@@ -757,6 +757,8 @@ function normalizeChatTestApiMode(raw) {
   if (raw === "gemini-chat") return "gemini-chat";
   if (raw === "anthropic") return "anthropic";
   if (raw === "responses") return "responses";
+  if (raw === "openai-image") return "openai-image";
+  if (raw === "openai-embeddings") return "openai-embeddings";
   return "openai";
 }
 
@@ -769,11 +771,19 @@ function syncChatTestApiModeUi() {
   if (!modeEl || !gemEl || !modelEl || !promptEl) return;
   const mode = normalizeChatTestApiMode(modeEl.value);
   gemEl.hidden = mode !== "gemini-image";
-  if (streamWrap) streamWrap.hidden = mode === "gemini-image";
+  if (streamWrap)
+    streamWrap.hidden =
+      mode === "gemini-image" || mode === "openai-image" || mode === "openai-embeddings";
 
   let modelPlaceholderKey = "app.chatTestModelPlaceholder";
   let promptPlaceholderKey = "app.chatTestPromptPlaceholder";
-  if (mode === "gemini-image") {
+  if (mode === "openai-image") {
+    modelPlaceholderKey = "app.chatTestModelPlaceholderOpenAIImage";
+    promptPlaceholderKey = "app.chatTestPromptPlaceholderOpenAIImage";
+  } else if (mode === "openai-embeddings") {
+    modelPlaceholderKey = "app.chatTestModelPlaceholderOpenAIEmbed";
+    promptPlaceholderKey = "app.chatTestPromptPlaceholderOpenAIEmbed";
+  } else if (mode === "gemini-image") {
     modelPlaceholderKey = "app.chatTestModelPlaceholderGemini";
     promptPlaceholderKey = "app.chatTestPromptPlaceholderGemini";
   } else if (mode === "gemini-chat") {
@@ -882,6 +892,55 @@ function renderChatTestOutputOpenAI(outEl, text) {
   const pre = document.createElement("pre");
   pre.className = "chat-test-json-pre";
   pre.textContent = text;
+  outEl.appendChild(pre);
+}
+
+function renderChatTestOutputOpenAIImage(outEl, data) {
+  outEl.replaceChildren();
+  const d0 = data?.data?.[0];
+  const b64 = d0?.b64_json;
+  const url = d0?.url;
+  if (url) {
+    const a = document.createElement("a");
+    a.href = url;
+    a.target = "_blank";
+    a.rel = "noopener noreferrer";
+    a.textContent = url;
+    outEl.appendChild(a);
+    return;
+  }
+  if (b64) {
+    const img = document.createElement("img");
+    img.src = `data:image/png;base64,${b64}`;
+    img.alt = "generated";
+    img.style.maxWidth = "100%";
+    img.style.height = "auto";
+    outEl.appendChild(img);
+    const note = document.createElement("pre");
+    note.className = "chat-test-json-pre";
+    note.textContent = `base64 length: ${b64.length}`;
+    outEl.appendChild(note);
+    return;
+  }
+  const pre = document.createElement("pre");
+  pre.className = "chat-test-json-pre";
+  pre.textContent = JSON.stringify(data, null, 2);
+  outEl.appendChild(pre);
+}
+
+function renderChatTestOutputOpenAIEmbedding(outEl, data) {
+  outEl.replaceChildren();
+  const emb = data?.data?.[0]?.embedding;
+  const pre = document.createElement("pre");
+  pre.className = "chat-test-json-pre";
+  if (Array.isArray(emb)) {
+    const preview = emb.slice(0, 16);
+    pre.textContent = `dimensions: ${emb.length}\npreview: [${preview.join(", ")}]${
+      emb.length > 16 ? "\n…" : ""
+    }`;
+  } else {
+    pre.textContent = JSON.stringify(data, null, 2);
+  }
   outEl.appendChild(pre);
 }
 
@@ -1064,7 +1123,11 @@ async function init() {
     const apiMode = normalizeChatTestApiMode(rawApi);
     const streamModeEl = document.getElementById("chatTestStreamMode");
     const wantSse =
-      apiMode !== "gemini-image" && streamModeEl && String(streamModeEl.value) === "sse";
+      apiMode !== "gemini-image" &&
+      apiMode !== "openai-image" &&
+      apiMode !== "openai-embeddings" &&
+      streamModeEl &&
+      String(streamModeEl.value) === "sse";
 
     if (!tokenId) {
       msgEl.className = "msg err";
@@ -1081,7 +1144,7 @@ async function init() {
       msgEl.textContent = "请输入要测试的模型";
       return;
     }
-    if (apiMode !== "gemini-image" && !prompt) {
+    if (apiMode !== "gemini-image" && apiMode !== "openai-image" && apiMode !== "openai-embeddings" && !prompt) {
       msgEl.className = "msg err";
       msgEl.textContent = "请输入消息内容";
       return;
@@ -1093,7 +1156,7 @@ async function init() {
     msgEl.textContent = "发送中...";
 
     const timeoutMs =
-      apiMode === "gemini-image"
+      apiMode === "gemini-image" || apiMode === "openai-image"
         ? 300_000
         : wantSse
           ? CHAT_TEST_STREAM_TIMEOUT_MS
@@ -1130,6 +1193,21 @@ async function init() {
           imageConfig: { aspectRatio: aspect, imageSize },
           responseModalities: ["IMAGE"],
         },
+      };
+    } else if (apiMode === "openai-image") {
+      path = "/v1/images/generations";
+      payload = {
+        model,
+        prompt: prompt || "minimal abstract soft gradient",
+        n: 1,
+        size: "1024x1024",
+        quality: "low",
+      };
+    } else if (apiMode === "openai-embeddings") {
+      path = "/v1/embeddings";
+      payload = {
+        model,
+        input: prompt || "connectivity test",
       };
     } else if (apiMode === "gemini-chat") {
       path = wantSse
@@ -1238,6 +1316,10 @@ async function init() {
 
         if (apiMode === "gemini-image") {
           renderChatTestOutputGeminiImage(outEl, data);
+        } else if (apiMode === "openai-image") {
+          renderChatTestOutputOpenAIImage(outEl, data);
+        } else if (apiMode === "openai-embeddings") {
+          renderChatTestOutputOpenAIEmbedding(outEl, data);
         } else if (apiMode === "gemini-chat") {
           const content = geminiAssistantPlainText(data) || geminiResponseJsonForPre(data);
           renderChatTestOutputOpenAI(outEl, content);
@@ -1261,7 +1343,7 @@ async function init() {
       msgEl.className = "msg err";
       if (err && (err.name === "AbortError" || /aborted/i.test(String(err.message || "")))) {
         const sec = String(timeoutMs / 1000);
-        if (apiMode === "gemini-image") {
+        if (apiMode === "gemini-image" || apiMode === "openai-image") {
           msgEl.textContent = t("app.chatTestTimeoutGemini").replace(/\{seconds\}/g, sec);
         } else if (wantSse) {
           msgEl.textContent = t("app.chatTestTimeoutStream").replace(/\{seconds\}/g, sec);

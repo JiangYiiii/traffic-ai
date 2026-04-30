@@ -116,10 +116,12 @@
       "app.redeemDesc": "使用兑换码即时充值，结果会同步写入余额流水。",
       "app.chatTestTitle": "对话测试",
       "app.chatTestDesc":
-        "使用子令牌测试各接口。文本类可在「响应格式」中选择流式 (SSE) 或整段 JSON；Gemini 生图固定为非流式。",
+        "使用子令牌测试各接口。文本类可在「响应格式」中选择流式 (SSE) 或整段 JSON；生图/向量类接口固定为非流式。",
       "app.chatTestTokenLabel": "令牌",
       "app.chatTestApiLabel": "接口",
       "app.chatTestApiOpenAI": "OpenAI 对话",
+      "app.chatTestApiOpenAIImage": "OpenAI 生图",
+      "app.chatTestApiOpenAIEmbed": "OpenAI 向量",
       "app.chatTestApiResponses": "OpenAI Responses",
       "app.chatTestApiAnthropic": "Anthropic Messages",
       "app.chatTestApiGeminiChat": "Gemini 对话",
@@ -133,6 +135,8 @@
       "app.chatTestModelPlaceholderGeminiChat": "例如：gemini-2.5-flash",
       "app.chatTestModelPlaceholderGemini": "例如：gemini-3.1-flash-image-preview",
       "app.chatTestModelPlaceholderResponses": "例如：gpt-4o-mini（须配置 Responses 上游）",
+      "app.chatTestModelPlaceholderOpenAIImage": "例如：gpt-image-2（走 POST /v1/images/generations）",
+      "app.chatTestModelPlaceholderOpenAIEmbed": "例如：text-embedding-3-large",
       "app.chatTestAspectLabel": "宽高比",
       "app.chatTestImageSizeLabel": "图像尺寸",
       "app.chatTestGeminiImagesLabel": "参考图（可多选）",
@@ -146,6 +150,8 @@
       "app.chatTestPromptPlaceholderGemini":
         "可与多图配合：描述如何参考上图生成或编辑，例如：hi 或「按图二风格重画图一」。纯文生图也可只填此处。",
       "app.chatTestPromptPlaceholderResponses": "将作为请求体中的 input；流式/非流式由「响应格式」决定。",
+      "app.chatTestPromptPlaceholderOpenAIImage": "生图提示词；可留空则使用内置占位提示。",
+      "app.chatTestPromptPlaceholderOpenAIEmbed": "要向量化的文本；可留空则使用内置占位句。",
       "app.chatTestStreaming": "正在接收流式响应…",
       "app.chatTestStreamDone": "流式输出已完成",
       "app.chatTestSend": "发送测试",
@@ -229,7 +235,7 @@
       "docs.models.yes": "是",
       "docs.models.no": "否",
       "docs.li.dual":
-        "多通道：POST /v1/chat/completions（OpenAI Chat）、POST /v1/embeddings（OpenAI Embeddings）、POST /v1/audio/speech（OpenAI Audio Speech）、POST /v1/responses（OpenAI Responses）、POST /v1/messages（Anthropic）、POST /v1beta/models/…:generateContent（Gemini）等。是否可用取决于你的账号权限、模型开通情况与令牌分组（tokenGroup）。",
+        "多通道：POST /v1/chat/completions、POST /v1/images/generations、POST /v1/embeddings（OpenAI 兼容）、POST /v1/audio/speech（OpenAI Audio Speech）、POST /v1/responses（OpenAI Responses）、POST /v1/messages（Anthropic）、POST /v1beta/models/…:generateContent（Gemini）等。是否可用取决于你的账号权限、模型开通情况与令牌分组（tokenGroup）。",
       "docs.li.billing":
         "按控制台展示的模型价目从余额扣费；流式请求通常先按预估上限预扣，再以实际用量结算（以服务端实现为准）。",
       "docs.li.https": "生产环境请始终使用 HTTPS。",
@@ -504,10 +510,12 @@
       "app.redeemDesc": "Redeem a code to top up instantly. The result is written to your balance logs right away.",
       "app.chatTestTitle": "Chat test",
       "app.chatTestDesc":
-        "Test each API with your sub-token. For text modes, choose streaming (SSE) or a single JSON response; Gemini image is always non-streaming.",
+        "Test each API with your sub-token. For text, choose streaming (SSE) or a single JSON body; image/embeddings calls are always non-streaming.",
       "app.chatTestTokenLabel": "Token",
       "app.chatTestApiLabel": "API",
       "app.chatTestApiOpenAI": "OpenAI chat",
+      "app.chatTestApiOpenAIImage": "OpenAI image",
+      "app.chatTestApiOpenAIEmbed": "OpenAI embeddings",
       "app.chatTestApiResponses": "OpenAI Responses",
       "app.chatTestApiAnthropic": "Anthropic Messages",
       "app.chatTestApiGeminiChat": "Gemini chat",
@@ -521,6 +529,8 @@
       "app.chatTestModelPlaceholderGeminiChat": "e.g. gemini-2.5-flash",
       "app.chatTestModelPlaceholderGemini": "e.g. gemini-3.1-flash-image-preview",
       "app.chatTestModelPlaceholderResponses": "e.g. gpt-4o-mini (needs Responses upstream)",
+      "app.chatTestModelPlaceholderOpenAIImage": "e.g. gpt-image-2 (POST /v1/images/generations)",
+      "app.chatTestModelPlaceholderOpenAIEmbed": "e.g. text-embedding-3-large",
       "app.chatTestAspectLabel": "Aspect ratio",
       "app.chatTestImageSizeLabel": "Image size",
       "app.chatTestGeminiImagesLabel": "Reference images (multi-select)",
@@ -534,6 +544,8 @@
       "app.chatTestPromptPlaceholderGemini":
         "Use with images: how to use the references, e.g. hi or “restyle image 1 like image 2”. Text-only generation works too.",
       "app.chatTestPromptPlaceholderResponses": "Sent as the string `input`; streaming vs JSON is chosen above.",
+      "app.chatTestPromptPlaceholderOpenAIImage": "Image prompt; leave empty to use a built-in placeholder.",
+      "app.chatTestPromptPlaceholderOpenAIEmbed": "Text to embed; leave empty to use a built-in sentence.",
       "app.chatTestStreaming": "Receiving stream…",
       "app.chatTestStreamDone": "Stream finished",
       "app.chatTestSend": "Send test",
@@ -617,7 +629,7 @@
       "docs.models.yes": "Yes",
       "docs.models.no": "No",
       "docs.li.dual":
-        "Multiple paths: POST /v1/chat/completions (OpenAI Chat), POST /v1/embeddings (OpenAI Embeddings), POST /v1/audio/speech (OpenAI Audio Speech), POST /v1/responses (OpenAI Responses), POST /v1/messages (Anthropic), POST /v1beta/models/…:generateContent (Gemini). Availability depends on your account permissions, model enablement, and the sub-token’s tokenGroup.",
+        "Multiple paths: POST /v1/chat/completions, POST /v1/images/generations, POST /v1/embeddings (OpenAI-compatible), POST /v1/audio/speech (OpenAI Audio Speech), POST /v1/responses (OpenAI Responses), POST /v1/messages (Anthropic), POST /v1beta/models/…:generateContent (Gemini). Availability depends on your account permissions, model enablement, and the sub-token’s tokenGroup.",
       "docs.li.billing":
         "Billing uses model prices shown in the console; streaming often pre-authorizes an estimate then settles on actual usage (per server behavior).",
       "docs.li.https": "Always use HTTPS in production.",

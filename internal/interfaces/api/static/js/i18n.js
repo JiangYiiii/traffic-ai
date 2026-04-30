@@ -630,6 +630,16 @@
       "admin.playground.defaultMsg": "请用一句话介绍你自己。",
       "admin.playground.ok": "测试成功",
       "admin.playground.fail": "测试失败",
+      "admin.playground.hintEmbedding":
+        "当前模型类型为 embedding：将向绑定的上游发送 POST …/embeddings，下方文本作为 input（管理端代理，不经用户网关计费）。",
+      "admin.playground.hintImage":
+        "当前模型类型为 image：将向绑定的上游发送 POST …/images/generations，下方为提示词（默认 1024×1024、quality=low；管理端代理）。",
+      "admin.playground.hintSpeech":
+        "语音合成模型请在用户控制台「对话测试」中选择「OpenAI 语音」接口调试；管理端 Playground 不支持 TTS。",
+      "admin.playground.inputEmbed": "要向量化的文本",
+      "admin.playground.inputImage": "生图提示词",
+      "admin.playground.outEmbed": "向量结果摘要",
+      "admin.playground.outImage": "生成结果",
 
       "admin.account.modalTitle": "提供商账号",
       "admin.account.name": "账号名",
@@ -1324,6 +1334,16 @@
       "admin.playground.defaultMsg": "Please introduce yourself in one sentence.",
       "admin.playground.ok": "Test succeeded",
       "admin.playground.fail": "Test failed",
+      "admin.playground.hintEmbedding":
+        "This model is embedding: sends POST …/embeddings with the text below as input (admin proxy, not billed via user gateway).",
+      "admin.playground.hintImage":
+        "This model is image: sends POST …/images/generations with the prompt below (default 1024×1024, quality=low; admin proxy).",
+      "admin.playground.hintSpeech":
+        "For TTS models use the user console chat tester with the OpenAI Speech API; admin Playground does not support TTS.",
+      "admin.playground.inputEmbed": "Text to embed",
+      "admin.playground.inputImage": "Image prompt",
+      "admin.playground.outEmbed": "Embedding summary",
+      "admin.playground.outImage": "Generated output",
 
       "admin.account.modalTitle": "Provider account",
       "admin.account.name": "Account name",

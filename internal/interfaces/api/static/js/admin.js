@@ -536,10 +536,44 @@
     (models || []).forEach((m) => {
       const opt = document.createElement("option");
       opt.value = String(m.id);
-      opt.textContent = `${m.model_name} · ${m.provider}`;
+      const mt = (m.model_type || "chat").toLowerCase();
+      opt.dataset.modelType = mt;
+      opt.textContent = `${m.model_name} · ${m.provider} · ${mt}`;
       sel.appendChild(opt);
     });
     if (cur && [...sel.options].some((o) => o.value === cur)) sel.value = cur;
+    syncPlaygroundForm();
+  }
+
+  function getPlaygroundModelType() {
+    const sel = document.getElementById("pgModelId");
+    const opt = sel?.selectedOptions?.[0];
+    return String(opt?.dataset?.modelType || "chat").toLowerCase();
+  }
+
+  function syncPlaygroundForm() {
+    const kind = getPlaygroundModelType();
+    const hint = document.getElementById("pgHint");
+    const maxWrap = document.getElementById("pgMaxTokensWrap");
+    const uLabel = document.getElementById("pgUserLabel");
+    const oLabel = document.getElementById("pgOutLabel");
+    if (hint) {
+      if (kind === "embedding") hint.textContent = t("admin.playground.hintEmbedding");
+      else if (kind === "image") hint.textContent = t("admin.playground.hintImage");
+      else if (kind === "speech") hint.textContent = t("admin.playground.hintSpeech");
+      else hint.textContent = t("admin.playground.hint");
+    }
+    if (maxWrap) maxWrap.hidden = kind === "embedding" || kind === "image" || kind === "speech";
+    if (uLabel) {
+      if (kind === "embedding") uLabel.textContent = t("admin.playground.inputEmbed");
+      else if (kind === "image") uLabel.textContent = t("admin.playground.inputImage");
+      else uLabel.textContent = t("admin.playground.userMsg");
+    }
+    if (oLabel) {
+      if (kind === "embedding") oLabel.textContent = t("admin.playground.outEmbed");
+      else if (kind === "image") oLabel.textContent = t("admin.playground.outImage");
+      else oLabel.textContent = t("admin.playground.assistant");
+    }
   }
 
   async function runPlayground() {
@@ -547,9 +581,14 @@
     const msg = document.getElementById("pgUserMsg")?.value?.trim() || "";
     const maxTok = Number(document.getElementById("pgMaxTokens")?.value) || 256;
     const out = document.getElementById("pgOut");
+    const imgBox = document.getElementById("pgImagePreview");
     if (!id) {
       showToast(t("admin.playground.needModel"), false);
       return;
+    }
+    if (imgBox) {
+      imgBox.hidden = true;
+      imgBox.replaceChildren();
     }
     const messages = [{ role: "user", content: msg || t("admin.playground.defaultMsg") }];
     if (out) out.textContent = t("common.loading");
@@ -561,6 +600,16 @@
       if (!data || !out) return;
       if (data.success) {
         const latency = data.latency_ms != null ? `\n\n— ${data.latency_ms} ms` : "";
+        if (data.result_kind === "image" && data.image_data_url && imgBox) {
+          imgBox.hidden = false;
+          const img = document.createElement("img");
+          img.src = data.image_data_url;
+          img.alt = "preview";
+          img.className = "mb-2 rounded border";
+          img.style.maxWidth = "100%";
+          img.style.height = "auto";
+          imgBox.appendChild(img);
+        }
         out.textContent = (data.assistant || "—") + latency;
         showToast(t("admin.playground.ok"), true);
       } else {
@@ -1855,6 +1904,7 @@
     document.getElementById("discoverModelPick")?.addEventListener("change", () => syncDiscoverPickToModelName());
     document.getElementById("btnDiscoverBatchAdd")?.addEventListener("click", () => discoverBatchAdd());
     document.getElementById("btnPgSend")?.addEventListener("click", () => runPlayground());
+    document.getElementById("pgModelId")?.addEventListener("change", () => syncPlaygroundForm());
 
     document.getElementById("upstreamModalSave")?.addEventListener("click", saveUpstream);
 
