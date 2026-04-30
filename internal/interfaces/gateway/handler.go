@@ -38,15 +38,19 @@ func (h *Handler) ListModels(c *gin.Context) {
 		Object  string `json:"object"`
 		Created int64  `json:"created"`
 		OwnedBy string `json:"owned_by"`
+		// Traffic 扩展字段：chat | embedding | image | speech 等，便于调用端（如 OpenClaw 同步脚本）
+		// 区分「对话模型」与「仅图片生成」部署；OpenAI 官方模型对象外的附加键，兼容客户端可忽略。
+		TrafficModelType string `json:"traffic_model_type,omitempty"`
 	}
 
 	items := make([]modelItem, 0, len(models))
 	for _, m := range models {
 		items = append(items, modelItem{
-			ID:      m.ModelName,
-			Object:  "model",
-			Created: m.CreatedAt.Unix(),
-			OwnedBy: m.Provider,
+			ID:               m.ModelName,
+			Object:           "model",
+			Created:          m.CreatedAt.Unix(),
+			OwnedBy:          m.Provider,
+			TrafficModelType: m.ModelType,
 		})
 	}
 

@@ -108,18 +108,44 @@ def _build_model_entry(
     }
 
 
-def _parse_models_response(body: dict[str, Any]) -> list[str]:
+def _parse_models_response(body: dict[str, Any]) -> tuple[list[str], dict[str, str]]:
+    """返回 (排序后的模型 id 列表, id -> traffic_model_type)。
+
+    traffic_model_type 来自 Traffic 网关 GET /v1/models 的扩展字段；旧网关无该字段时视为空串。
+    """
     data = body.get("data")
     if not isinstance(data, list):
-        return []
+        return [], {}
     ids: list[str] = []
+    types: dict[str, str] = {}
     for item in data:
         if not isinstance(item, dict):
             continue
         mid = item.get("id")
         if isinstance(mid, str) and mid.strip():
-            ids.append(mid.strip())
-    return sorted(set(ids))
+            key = mid.strip()
+            ids.append(key)
+            tt = item.get("traffic_model_type")
+            if isinstance(tt, str) and tt.strip():
+                types[key] = tt.strip()
+    return sorted(set(ids)), types
+
+
+def _is_chat_ineligible(model_id: str, traffic_type: str) -> bool:
+    """不应作为 OpenClaw 主对话模型（仅走 chat/completions）的模型：纯图片生成部署等。"""
+    tt = (traffic_type or "").strip().lower()
+    if tt == "image":
+        return True
+    low = model_id.lower()
+    # 无 traffic_model_type 时的启发式（同步旧网关或字段缺失）
+    if not tt and (low.startswith("gpt-image") or "dall-e" in low):
+        return True
+    return False
+
+
+def _chat_eligible_ids(ids: list[str], types: dict[str, str]) -> list[str]:
+    eligible = [i for i in ids if not _is_chat_ineligible(i, types.get(i, ""))]
+    return eligible
 
 
 # OpenClaw 内建校验与常见 OpenAI embedding 维度（与 node_modules/openclaw 中 vectorDimsForModel 对齐）
@@ -326,7 +352,7 @@ def main() -> int:
         print(f"ERROR: 拉取或解析失败: {e!s} URL={list_url}", file=sys.stderr)
         return 1
 
-    id_list = _parse_models_response(remote)
+    id_list, model_types = _parse_models_response(remote)
     if not id_list:
         print(
             f"WARNING: 远端返回 0 个模型，跳过写回以免清空本地列表。URL={list_url}",
@@ -361,6 +387,14 @@ def main() -> int:
 
     new_embedding = _build_embedding_block(data, traffic, id_list)
 
+    chat_eligible = _chat_eligible_ids(id_list, model_types)
+    if not chat_eligible:
+        print(
+            "WARN: 无适合对话（chat）的模型（可能仅有图片生成等）；将退回完整列表，OpenClaw 若把 image 设为 primary 会走 chat/completions 失败。",
+            file=sys.stderr,
+        )
+        chat_eligible = id_list
+
     ad = data.get("agents", {}).get("defaults", {})
     if not isinstance(ad, dict):
         ad = {}
@@ -369,10 +403,10 @@ def main() -> int:
     )
     mcfg = ad.get("model", {})
     sub = ad.get("subagents", {})
-    current_primary = str(mcfg.get("primary", f"{provider_tag}/{id_list[0]}"))
+    current_primary = str(mcfg.get("primary", f"{provider_tag}/{chat_eligible[0]}"))
 
     new_primary = _pick_primary(
-        id_list, env_primary, current_primary, provider_tag
+        chat_eligible, env_primary, current_primary, provider_tag
     )
     # 子代理默认与主模型一致。旧逻辑会在「旧 sub.id 仍在 id_list」时保留（例如仍为 haiku），
     # 与用户通过 TRAFFIC_PRIMARY_MODEL 切换主模型时期望不一致，故不再保留旧 sub。
