@@ -102,8 +102,20 @@ func (s *stubAccountRepo) ListActiveByModelIDs(_ context.Context, ids []int64) (
 	}
 	return out, nil
 }
-func (s *stubAccountRepo) ListByIDs(context.Context, []int64) ([]*domainModel.ModelAccount, error) {
-	return nil, nil
+func (s *stubAccountRepo) ListByIDs(_ context.Context, ids []int64) ([]*domainModel.ModelAccount, error) {
+	index := make(map[int64]*domainModel.ModelAccount)
+	for _, list := range s.activeByModelID {
+		for _, a := range list {
+			index[a.ID] = a
+		}
+	}
+	var out []*domainModel.ModelAccount
+	for _, id := range ids {
+		if a, ok := index[id]; ok {
+			out = append(out, a)
+		}
+	}
+	return out, nil
 }
 func (s *stubAccountRepo) List(context.Context, domainModel.ModelAccountListFilter) ([]*domainModel.ModelAccount, error) {
 	return nil, nil
@@ -126,7 +138,7 @@ func mustEncrypt(t *testing.T, plain string) string {
 
 func buildFixture(t *testing.T) (*UseCase, *stubTokenGroupRepo, *stubModelRepo, *stubAccountRepo, *mockBreaker) {
 	t.Helper()
-	m := &domainModel.Model{ID: 10, ModelName: "gpt-4o", IsActive: true}
+	m := &domainModel.Model{ID: 10, ModelName: "gpt-4o", IsActive: true, IsListed: true}
 	tg := &stubTokenGroupRepo{accountIDsByGroupName: map[string][]int64{
 		"default": {1, 2},
 	}}
@@ -184,5 +196,30 @@ func TestSelectModelAccount_AllFilteredReturnsNoRoute(t *testing.T) {
 	_, err := uc.SelectModelAccount(context.Background(), "default", "gpt-4o", "openai")
 	if !errors.Is(err, errcode.ErrNoAvailableRoute) {
 		t.Fatalf("expected ErrNoAvailableRoute, got %v", err)
+	}
+}
+
+func TestSelectOpenAICompatibleAccount_WithHint(t *testing.T) {
+	uc, _, _, _, _ := buildFixture(t)
+	res, err := uc.SelectOpenAICompatibleAccount(context.Background(), "default", "gpt-4o")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Account.Credential == "" {
+		t.Fatal("expected decrypted credential")
+	}
+}
+
+func TestSelectOpenAICompatibleAccount_NoHint(t *testing.T) {
+	uc, _, _, _, _ := buildFixture(t)
+	res, err := uc.SelectOpenAICompatibleAccount(context.Background(), "default", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Model.ModelName != "gpt-4o" {
+		t.Fatalf("model: %s", res.Model.ModelName)
+	}
+	if res.Account.ID != 1 && res.Account.ID != 2 {
+		t.Fatalf("unexpected account id %d", res.Account.ID)
 	}
 }

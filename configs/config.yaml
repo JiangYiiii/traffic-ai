@@ -60,7 +60,7 @@ gateway:
     idle_conn_timeout_sec: 90
     dial_timeout_sec: 5
     tls_handshake_timeout_sec: 10
-    response_header_timeout_sec: 30
+    response_header_timeout_sec: 300
     stream_idle_timeout_sec: 60
   circuit:
     enabled: true

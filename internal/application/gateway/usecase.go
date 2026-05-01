@@ -67,6 +67,9 @@ const maxErrorMessageBytes = 16 * 1024
 // 够装 Anthropic/OpenAI 的 rate_limit_error、400 错误、5xx HTML 错误页等常见情况。
 const maxUpstreamErrorBodyBytes = 64 * 1024
 
+// MaxImageEditsRequestBody POST /v1/images/edits 允许的请求体大小（multipart，多图参考）；与控制台 Playground 生图 32MB 对齐。
+const MaxImageEditsRequestBody = 32 << 20
+
 // ProxyResult 包含单次转发的完整结果信息。
 type ProxyResult struct {
 	StatusCode          int
@@ -914,6 +917,119 @@ func (uc *UseCase) ProxyGeneric(
 	isSSE := strings.Contains(ct, "text/event-stream") || strings.Contains(ct, "event-stream")
 
 	if isStream && isSSE {
+		return uc.handleStream(w, resp, tok, route, requestID, chatReq, start, estimatedCost, callCtx)
+	}
+	return false, uc.handleNonStream(w, resp, tok, route, requestID, chatReq, start, estimatedCost, callCtx)
+}
+
+// ProxyImageEdits 转发 POST /v1/images/edits：multipart 原样透传（仅 Azure deployment URL 时去掉 form 字段 model）。
+// 路由用表单字段 model；Content-Type 必须与 body boundary 一致。
+func (uc *UseCase) ProxyImageEdits(
+	ctx context.Context,
+	tok *token.Token,
+	reqBody []byte,
+	contentType string,
+	rawHeaders http.Header,
+	w http.ResponseWriter,
+	requestID string,
+	clientIP string,
+) (written bool, err error) {
+	const upstreamPath = "/images/edits"
+	protocol := "openai"
+	start := time.Now()
+	callCtx := &callContext{Protocol: protocol, ClientIP: clientIP}
+
+	modelName, exErr := extractModelFromMultipart(reqBody, contentType)
+	if exErr != nil || modelName == "" {
+		return false, errcode.ErrBadRequest
+	}
+
+	chatReq := ChatRequest{Model: modelName, Stream: false}
+
+	route, err := uc.routingSvc.SelectModelAccount(ctx, tok.TokenGroup, modelName, protocol)
+	if err != nil {
+		return false, err
+	}
+
+	rlReq := &ratelimit.CheckRequest{
+		UserID:          tok.UserID,
+		APIKeyID:        tok.ID,
+		Model:           modelName,
+		EstimatedTokens: estimateTokens(route.Model, false),
+	}
+	if err := uc.rateLimiter.Allow(ctx, rlReq); err != nil {
+		uc.recordRateLimitReject(err, requestID, tok, modelName)
+		return false, err
+	}
+	defer uc.rateLimiter.Release(ctx, rlReq)
+
+	inflightModel := route.Model.ModelName
+	inflightAccount := accountIDStr(route.Account.ID)
+	uc.metrics.IncInflight(inflightModel, inflightAccount)
+	defer uc.metrics.DecInflight(inflightModel, inflightAccount)
+
+	if !route.Model.IsListed {
+		return false, errcode.ErrModelNotListed
+	}
+
+	estimatedCost := uc.estimateCost(route.Model, false)
+	if err := uc.billingSvc.CheckBalance(ctx, tok.UserID, estimatedCost); err != nil {
+		return false, err
+	}
+	if err := uc.billingSvc.PreDeduct(ctx, tok.UserID, estimatedCost, requestID); err != nil {
+		return false, err
+	}
+
+	upstreamURL := upstreamurl.JoinPath(route.Account.Endpoint, upstreamPath)
+	upstreamBody := reqBody
+	upstreamCT := contentType
+	if azureOpenAIDeploymentEndpoint(route.Account.Endpoint) {
+		stripped, newCT, sErr := stripMultipartModelFormField(reqBody, contentType)
+		if sErr != nil {
+			logger.L.Errorw("strip multipart model for azure image edits failed",
+				"request_id", requestID, "error", sErr)
+			uc.settleAndLog(tok, route, requestID, chatReq, start, &ProxyResult{ErrorMessage: "rewrite multipart failed"}, estimatedCost, callCtx)
+			return false, errcode.ErrBadRequest
+		}
+		upstreamBody = stripped
+		upstreamCT = newCT
+	}
+
+	upstreamReq, err := http.NewRequestWithContext(ctx, http.MethodPost, upstreamURL, bytes.NewReader(upstreamBody))
+	if err != nil {
+		logger.L.Errorw("build upstream request failed", "error", err)
+		uc.settleAndLog(tok, route, requestID, chatReq, start, &ProxyResult{ErrorMessage: "build request failed"}, estimatedCost, callCtx)
+		return false, errcode.ErrInternal
+	}
+	upstreamReq.Header.Set("Content-Type", upstreamCT)
+	upstreamReq.Header.Set("Authorization", "Bearer "+route.Account.Credential)
+	if ua := rawHeaders.Get("User-Agent"); ua != "" {
+		upstreamReq.Header.Set("User-Agent", ua)
+	}
+
+	client := uc.getUpstreamClient(route.Account.ID, route.Account.TimeoutSec)
+	resp, err := client.Do(upstreamReq)
+	if err != nil {
+		logger.L.Errorw("upstream request failed", "error", err, "upstream", upstreamURL, "protocol", protocol)
+		result := &ProxyResult{ErrorMessage: err.Error()}
+		uc.settleAndLog(tok, route, requestID, chatReq, start, result, estimatedCost, callCtx)
+		if ctx.Err() != nil || strings.Contains(err.Error(), "timeout") {
+			return false, errcode.ErrUpstreamTimeout
+		}
+		return false, errcode.ErrUpstreamError
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return uc.proxyUpstreamError(w, resp, tok, route, requestID, chatReq, start, estimatedCost, callCtx)
+	}
+
+	w.Header().Set("X-Request-Id", requestID)
+	w.Header().Set("X-Actual-Model", route.Model.ModelName)
+
+	ct := resp.Header.Get("Content-Type")
+	isSSE := strings.Contains(ct, "text/event-stream") || strings.Contains(ct, "event-stream")
+	if chatReq.Stream && isSSE {
 		return uc.handleStream(w, resp, tok, route, requestID, chatReq, start, estimatedCost, callCtx)
 	}
 	return false, uc.handleNonStream(w, resp, tok, route, requestID, chatReq, start, estimatedCost, callCtx)

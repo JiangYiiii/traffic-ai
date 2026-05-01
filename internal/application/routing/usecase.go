@@ -3,6 +3,7 @@ package routing
 import (
 	"context"
 	"math/rand"
+	"strings"
 	"time"
 
 	"github.com/trailyai/traffic-ai/internal/application/oauth"
@@ -133,6 +134,110 @@ func (uc *UseCase) SelectModelAccountExcluding(ctx context.Context, tokenGroup, 
 	return uc.selectModelAccountCore(ctx, tokenGroup, modelName, protocol, excludeIDs)
 }
 
+// SelectOpenAICompatibleAccount 见 domainRouting.RoutingService。
+func (uc *UseCase) SelectOpenAICompatibleAccount(ctx context.Context, tokenGroup, modelHint string) (*domainRouting.RouteResult, error) {
+	if strings.TrimSpace(modelHint) != "" {
+		return uc.SelectModelAccount(ctx, tokenGroup, strings.TrimSpace(modelHint), "openai")
+	}
+
+	accountIDs, err := uc.tgRepo.ListModelAccountIDsByName(ctx, tokenGroup)
+	if err != nil {
+		logger.L.Errorw("routing: list model account ids failed", "error", err, "group", tokenGroup)
+		return nil, errcode.ErrInternal
+	}
+	if len(accountIDs) == 0 {
+		return nil, errcode.ErrNoAvailableRoute
+	}
+
+	accounts, err := uc.accountRepo.ListByIDs(ctx, accountIDs)
+	if err != nil {
+		logger.L.Errorw("routing: list model accounts by ids failed", "error", err)
+		return nil, errcode.ErrInternal
+	}
+
+	var candidates []*domainModel.ModelAccount
+	for _, a := range accounts {
+		if !a.IsActive {
+			continue
+		}
+		if !routingProtocolMatches("openai", a.Protocol) {
+			continue
+		}
+		if uc.breaker != nil {
+			allowed, bErr := uc.breaker.Allow(ctx, a.ID)
+			if bErr != nil {
+				logger.L.Warnw("routing: circuit breaker Allow failed, allowing conservatively",
+					"modelAccountID", a.ID, "error", bErr)
+			} else if !allowed {
+				continue
+			}
+		}
+		m, ferr := uc.modelRepo.FindByID(ctx, a.ModelID)
+		if ferr != nil || m == nil || !m.IsActive || !m.IsListed {
+			continue
+		}
+		candidates = append(candidates, a)
+	}
+
+	if len(candidates) == 0 {
+		return nil, errcode.ErrNoAvailableRoute
+	}
+
+	chosen := weightedRandom(candidates)
+	m, err := uc.modelRepo.FindByID(ctx, chosen.ModelID)
+	if err != nil || m == nil {
+		logger.L.Errorw("routing: find model for chosen account failed", "error", err, "modelAccountID", chosen.ID)
+		return nil, errcode.ErrInternal
+	}
+
+	if err := uc.materializeAccountCredentials(ctx, chosen, m); err != nil {
+		return nil, err
+	}
+	return &domainRouting.RouteResult{Account: chosen, Model: m}, nil
+}
+
+// materializeAccountCredentials 解密 credential，并在 OAuth 将过期时刷新 access_token。
+func (uc *UseCase) materializeAccountCredentials(ctx context.Context, chosen *domainModel.ModelAccount, m *domainModel.Model) error {
+	plain, err := crypto.DecryptAES(chosen.Credential, uc.aesKey)
+	if err != nil {
+		logger.L.Errorw("routing: decrypt credential failed", "error", err, "modelAccountID", chosen.ID)
+		return errcode.ErrInternal
+	}
+	chosen.Credential = plain
+
+	if chosen.AuthType == "oauth_authorization_code" && chosen.TokenExpiresAt != nil {
+		if time.Until(*chosen.TokenExpiresAt) < 5*time.Minute {
+			refreshToken := ""
+			if chosen.RefreshToken != "" {
+				rt, decErr := crypto.DecryptAES(chosen.RefreshToken, uc.aesKey)
+				if decErr == nil {
+					refreshToken = rt
+				} else {
+					logger.L.Warnw("routing: decrypt refresh_token failed", "modelAccountID", chosen.ID)
+				}
+			}
+			if refreshToken != "" {
+				providerID := ""
+				if m != nil {
+					providerID = m.Provider
+				}
+				if providerID != "" {
+					newAccess, newRefresh, expiresIn, refreshErr := oauth.RefreshAccessToken(ctx, uc.oauthCfg, providerID, refreshToken)
+					if refreshErr == nil {
+						chosen.Credential = newAccess
+						go uc.persistRefreshedToken(chosen.ID, newAccess, newRefresh, expiresIn)
+						logger.L.Infow("routing: oauth token refreshed", "modelAccountID", chosen.ID)
+					} else {
+						logger.L.Warnw("routing: oauth token refresh failed, using existing token",
+							"modelAccountID", chosen.ID, "err", refreshErr)
+					}
+				}
+			}
+		}
+	}
+	return nil
+}
+
 // selectModelAccountCore 是真正的选号实现。两步候选过滤：
 //  1. excludeIDs 显式排除（fallback 场景）
 //  2. breaker.Allow 过滤（熔断 open 的账号）；breaker 报错时保守放行，
@@ -205,43 +310,8 @@ func (uc *UseCase) selectModelAccountCore(
 
 	chosen := weightedRandom(candidates)
 
-	plain, err := crypto.DecryptAES(chosen.Credential, uc.aesKey)
-	if err != nil {
-		logger.L.Errorw("routing: decrypt credential failed", "error", err, "modelAccountID", chosen.ID)
-		return nil, errcode.ErrInternal
-	}
-	chosen.Credential = plain
-
-	if chosen.AuthType == "oauth_authorization_code" && chosen.TokenExpiresAt != nil {
-		if time.Until(*chosen.TokenExpiresAt) < 5*time.Minute {
-			refreshToken := ""
-			if chosen.RefreshToken != "" {
-				rt, decErr := crypto.DecryptAES(chosen.RefreshToken, uc.aesKey)
-				if decErr == nil {
-					refreshToken = rt
-				} else {
-					logger.L.Warnw("routing: decrypt refresh_token failed", "modelAccountID", chosen.ID)
-				}
-			}
-			if refreshToken != "" {
-				model, _ := uc.modelRepo.FindByID(ctx, chosen.ModelID)
-				providerID := ""
-				if model != nil {
-					providerID = model.Provider
-				}
-				if providerID != "" {
-					newAccess, newRefresh, expiresIn, refreshErr := oauth.RefreshAccessToken(ctx, uc.oauthCfg, providerID, refreshToken)
-					if refreshErr == nil {
-						chosen.Credential = newAccess
-						go uc.persistRefreshedToken(chosen.ID, newAccess, newRefresh, expiresIn)
-						logger.L.Infow("routing: oauth token refreshed", "modelAccountID", chosen.ID)
-					} else {
-						logger.L.Warnw("routing: oauth token refresh failed, using existing token",
-							"modelAccountID", chosen.ID, "err", refreshErr)
-					}
-				}
-			}
-		}
+	if err := uc.materializeAccountCredentials(ctx, chosen, m); err != nil {
+		return nil, err
 	}
 
 	return &domainRouting.RouteResult{Account: chosen, Model: m}, nil
@@ -340,11 +410,15 @@ func (uc *UseCase) persistRefreshedToken(modelAccountID int64, newAccess, newRef
 // 控制台创建模型账号时默认 protocol 曾为 "chat"（OpenAI Chat Completions 兼容），
 // 而数据面 /v1/chat/completions 路由请求 protocol "openai"，二者应对齐。
 // 数据面 /v1/embeddings 使用 protocol "embeddings"，与同样走 OpenAI 兼容上游的 "chat" 账号兼容。
+// 数据面 /v1/images/generations 与 /v1/images/edits 使用 protocol "openai"，与 "image" 账号兼容。
 func routingProtocolMatches(requested, account string) bool {
 	if account == requested {
 		return true
 	}
 	if requested == "openai" && account == "chat" {
+		return true
+	}
+	if requested == "openai" && account == "image" {
 		return true
 	}
 	if requested == "embeddings" && account == "chat" {

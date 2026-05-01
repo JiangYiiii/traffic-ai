@@ -35,3 +35,17 @@ func TestJoinPath(t *testing.T) {
 		}
 	}
 }
+
+func TestAppendRawQuery(t *testing.T) {
+	base := JoinPath("https://x/openai/deployments/m1?api-version=2", "/files")
+	want := "https://x/openai/deployments/m1/files?api-version=2&limit=5"
+	if got := AppendRawQuery(base, "limit=5"); got != want {
+		t.Fatalf("AppendRawQuery(%q,%q)=%q want %q", base, "limit=5", got, want)
+	}
+	if got := AppendRawQuery("https://api.openai.com/v1/files", "purpose=vision"); got != "https://api.openai.com/v1/files?purpose=vision" {
+		t.Fatalf("AppendRawQuery plain: %q", got)
+	}
+	if got := AppendRawQuery(base, ""); got != base {
+		t.Fatalf("empty query should noop: %q", got)
+	}
+}

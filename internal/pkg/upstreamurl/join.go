@@ -20,3 +20,15 @@ func JoinPath(endpoint, pathSuffix string) string {
 	}
 	return endpoint[:q] + pathSuffix + endpoint[q:]
 }
+
+// AppendRawQuery 在 base URL 上追加 rawQuery（不含前导 `?`）。若 base 已含查询串（如 Azure ?api-version=…），用 `&` 拼接。
+func AppendRawQuery(base, rawQuery string) string {
+	rawQuery = strings.TrimSpace(rawQuery)
+	if rawQuery == "" {
+		return base
+	}
+	if strings.Contains(base, "?") {
+		return base + "&" + rawQuery
+	}
+	return base + "?" + rawQuery
+}

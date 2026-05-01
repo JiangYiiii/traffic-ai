@@ -94,6 +94,136 @@ func (h *Handler) ImagesGenerations(c *gin.Context) {
 	h.genericProxy(c, "openai", "/images/generations")
 }
 
+// ImagesEdits POST /v1/images/edits — multipart 透传（参考图 / mask 编辑）；表单字段 model 用于路由。
+func (h *Handler) ImagesEdits(c *gin.Context) {
+	tok := mustGetToken(c)
+	requestID := httputil.GetRequestID(c)
+
+	ct := strings.TrimSpace(c.GetHeader("Content-Type"))
+	if ct == "" || !strings.HasPrefix(strings.ToLower(ct), "multipart/") {
+		response.Fail(c, errcode.ErrBadRequest)
+		return
+	}
+
+	body, err := io.ReadAll(io.LimitReader(c.Request.Body, gwuc.MaxImageEditsRequestBody))
+	if err != nil {
+		response.Fail(c, errcode.ErrBadRequest)
+		return
+	}
+	defer c.Request.Body.Close()
+
+	written, proxyErr := h.uc.ProxyImageEdits(
+		c.Request.Context(),
+		tok,
+		body,
+		ct,
+		c.Request.Header,
+		c.Writer,
+		requestID,
+		c.ClientIP(),
+	)
+	if proxyErr != nil {
+		if written {
+			return
+		}
+		failWithErr(c, proxyErr)
+	}
+}
+
+func filesModelHint(c *gin.Context) string {
+	return strings.TrimSpace(c.Query("model"))
+}
+
+func openAIFilePathSegment(id string) bool {
+	if len(id) == 0 || len(id) > 200 {
+		return false
+	}
+	for _, r := range id {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' || r == '_' {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
+// FilesCreate POST /v1/files — multipart；路由用可选查询参数 model（缺省时在 tokenGroup 内任选 OpenAI 兼容账号）。
+func (h *Handler) FilesCreate(c *gin.Context) {
+	tok := mustGetToken(c)
+	requestID := httputil.GetRequestID(c)
+	ct := strings.TrimSpace(c.GetHeader("Content-Type"))
+	if ct == "" || !strings.HasPrefix(strings.ToLower(ct), "multipart/") {
+		response.Fail(c, errcode.ErrBadRequest)
+		return
+	}
+	body, err := io.ReadAll(io.LimitReader(c.Request.Body, gwuc.MaxFileUploadRequestBody))
+	if err != nil {
+		response.Fail(c, errcode.ErrBadRequest)
+		return
+	}
+	defer c.Request.Body.Close()
+	written, proxyErr := h.uc.ProxyOpenAIFiles(
+		c.Request.Context(), tok, http.MethodPost, "/files", c.Request.URL.RawQuery,
+		body, ct, false, c.Request.Header, c.Writer, filesModelHint(c), requestID, c.ClientIP(),
+	)
+	if proxyErr != nil {
+		if written {
+			return
+		}
+		failWithErr(c, proxyErr)
+	}
+}
+
+// FilesList GET /v1/files
+func (h *Handler) FilesList(c *gin.Context) {
+	h.proxyFilesRead(c, http.MethodGet, "/files", false)
+}
+
+// FilesRetrieve GET /v1/files/:file_id
+func (h *Handler) FilesRetrieve(c *gin.Context) {
+	id := c.Param("file_id")
+	if !openAIFilePathSegment(id) {
+		response.Fail(c, errcode.ErrBadRequest)
+		return
+	}
+	h.proxyFilesRead(c, http.MethodGet, "/files/"+id, false)
+}
+
+// FilesDownloadContent GET /v1/files/:file_id/content
+func (h *Handler) FilesDownloadContent(c *gin.Context) {
+	id := c.Param("file_id")
+	if !openAIFilePathSegment(id) {
+		response.Fail(c, errcode.ErrBadRequest)
+		return
+	}
+	h.proxyFilesRead(c, http.MethodGet, "/files/"+id+"/content", true)
+}
+
+// FilesDelete DELETE /v1/files/:file_id
+func (h *Handler) FilesDelete(c *gin.Context) {
+	id := c.Param("file_id")
+	if !openAIFilePathSegment(id) {
+		response.Fail(c, errcode.ErrBadRequest)
+		return
+	}
+	h.proxyFilesRead(c, http.MethodDelete, "/files/"+id, false)
+}
+
+func (h *Handler) proxyFilesRead(c *gin.Context, method, pathSuffix string, binary bool) {
+	tok := mustGetToken(c)
+	requestID := httputil.GetRequestID(c)
+	written, proxyErr := h.uc.ProxyOpenAIFiles(
+		c.Request.Context(), tok, method, pathSuffix, c.Request.URL.RawQuery,
+		nil, "", binary, c.Request.Header, c.Writer, filesModelHint(c), requestID, c.ClientIP(),
+	)
+	if proxyErr != nil {
+		if written {
+			return
+		}
+		failWithErr(c, proxyErr)
+	}
+}
+
 // Embeddings POST /v1/embeddings
 func (h *Handler) Embeddings(c *gin.Context) {
 	h.genericProxy(c, "embeddings", "/embeddings")
