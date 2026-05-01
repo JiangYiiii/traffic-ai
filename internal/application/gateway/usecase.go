@@ -860,7 +860,12 @@ func (uc *UseCase) ProxyGeneric(
 	}
 
 	upstreamURL := upstreamurl.JoinPath(route.Account.Endpoint, upstreamPath)
-	upstreamReq, err := http.NewRequestWithContext(ctx, http.MethodPost, upstreamURL, bytes.NewReader(reqBody))
+	upstreamBody := reqBody
+	// Azure 风格 deployment URL 下，部分上游不接受 images/generations body 再带 model（与 Playground 一致：只发 prompt 等）。
+	if protocol == "openai" && upstreamPath == "/images/generations" && azureOpenAIDeploymentEndpoint(route.Account.Endpoint) {
+		upstreamBody = stripTopLevelJSONKey(reqBody, "model")
+	}
+	upstreamReq, err := http.NewRequestWithContext(ctx, http.MethodPost, upstreamURL, bytes.NewReader(upstreamBody))
 	if err != nil {
 		logger.L.Errorw("build upstream request failed", "error", err)
 		uc.settleAndLog(tok, route, requestID, chatReq, start, &ProxyResult{ErrorMessage: "build request failed"}, estimatedCost, callCtx)

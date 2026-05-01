@@ -87,3 +87,41 @@ func TestInjectIncludeUsage_PreservesExtraFields(t *testing.T) {
 		t.Errorf("include_usage not set to true, got %v", opts["include_usage"])
 	}
 }
+
+func TestStripTopLevelJSONKey_RemovesModel(t *testing.T) {
+	in := []byte(`{"model":"gpt-image-2","prompt":"a cat","n":1,"size":"1024x1024"}`)
+	out := stripTopLevelJSONKey(in, "model")
+	want := []byte(`{"prompt":"a cat","n":1,"size":"1024x1024"}`)
+	jsonEqual(t, out, want)
+}
+
+func TestStripTopLevelJSONKey_NoModelPassthrough(t *testing.T) {
+	in := []byte(`{"prompt":"a cat","n":1,"size":"1024x1024","quality":"low"}`)
+	out := stripTopLevelJSONKey(in, "model")
+	jsonEqual(t, out, in)
+}
+
+func TestStripTopLevelJSONKey_InvalidJSONPassthrough(t *testing.T) {
+	in := []byte(`not json`)
+	out := stripTopLevelJSONKey(in, "model")
+	if string(out) != string(in) {
+		t.Fatalf("expected passthrough")
+	}
+}
+
+func TestAzureOpenAIDeploymentEndpoint(t *testing.T) {
+	cases := []struct {
+		endpoint string
+		want     bool
+	}{
+		{"https://example.com/openai/deployments/gpt-image-2?api-version=2024-02-01", true},
+		{"https://example.com/OpenAI/deployments/foo/bar", true},
+		{"https://api.openai.com/v1", false},
+		{"", false},
+	}
+	for _, tc := range cases {
+		if got := azureOpenAIDeploymentEndpoint(tc.endpoint); got != tc.want {
+			t.Errorf("%q: got %v want %v", tc.endpoint, got, tc.want)
+		}
+	}
+}
