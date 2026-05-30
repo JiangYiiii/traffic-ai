@@ -149,3 +149,37 @@ make build
 | `configs/config.prod.yaml.example` | 生产配置模板 |
 | `deploy/.env.example` | 环境变量模板 |
 | `migrations/` | 全部 DDL 版本 |
+| `Dockerfile` | control / gateway 镜像构建 |
+| `.cnb.yml` | CNB 云原生构建流水线 |
+
+## 10. CNB 自动化构建
+
+项目根目录 `.cnb.yml` 参考 hotel-management，在 **main / master** 分支 push 时自动：
+
+1. 构建 `traffic-ai-control`、`traffic-ai-gateway` 两个镜像
+2. 登录腾讯云 CCR（凭证经 `hotel-ccr-secrets` 密钥仓库 `imports` 注入）
+3. 推送 `{commit}` 与 `latest` 双标签
+
+### 10.1 首次配置
+
+1. 在 [CNB](https://cnb.cool) 创建仓库（建议路径 `xlj.3jk/traffic-ai`），与 GitHub 同步或作为推送目标
+2. 在腾讯云 CCR 创建两个镜像仓库：`traffic-ai-control`、`traffic-ai-gateway`
+3. 编辑 `.cnb.yml` 中的 `CONTROL_IMAGE_BASE`、`GATEWAY_IMAGE_BASE` 为实际 CCR 地址
+4. CCR 登录凭证沿用 `https://cnb.cool/xlj.3jk/hotel-ccr-secrets`（与 hotel-management 相同）
+
+### 10.2 推送到 CNB
+
+```bash
+# 创建访问令牌: CNB → 个人设置 → 访问令牌（读写权限）
+git remote add cnb https://cnb.cool/xlj.3jk/traffic-ai.git   # 首次
+git push https://cnb:<CNB令牌>@cnb.cool/xlj.3jk/traffic-ai.git main
+```
+
+### 10.3 本地验证构建
+
+```bash
+chmod +x scripts/cnb-build-local.sh
+./scripts/cnb-build-local.sh all
+```
+
+运行时请将生产配置挂载到 `/app/configs`（与 claw_manager 中 `~/openclaw-data/traffic-ai` 挂载方式一致），覆盖镜像内默认 `config.prod.yaml.example`。

@@ -1,0 +1,170 @@
+# 云原生构建流水线 - traffic-ai 控制面 + 数据面
+# main / master 推送时：构建 Docker 镜像并推送到腾讯云 CCR，供云托管 / Podman 部署使用
+# CCR 凭证从密钥仓库 https://cnb.cool/xlj.3jk/hotel-ccr-secrets/-/tree/main 引入（与 hotel-management 共用）
+# 更多资料见 https://docs.cnb.cool/build/quick-start.html
+#
+# 首次使用前请将 CONTROL_IMAGE_BASE / GATEWAY_IMAGE_BASE 改为你的 CCR 仓库地址（见 docs/deploy.md）。
+
+main:
+  push:
+    - name: "control 镜像构建并推送 CCR"
+      services:
+        - docker
+      imports: https://cnb.cool/xlj.3jk/hotel-ccr-secrets/-/blob/main/ccr-envs.yml
+      stages:
+        - name: 输出构建信息
+          script: |
+            echo "${CNB_BUILD_USER} 通过 ${CNB_BRANCH} 分支触发了 ${CNB_EVENT} 事件"
+            echo "Commit: ${CNB_COMMIT_SHORT:-latest}"
+            echo "Target: control"
+        - name: 设置镜像标签
+          script: |
+            CONTROL_IMAGE_BASE="ccr.ccs.tencentyun.com/tcb-100047239037-vcqy/traffic-ai-control"
+            TAG="${CNB_COMMIT_SHORT:-latest}"
+            echo -n "${CONTROL_IMAGE_BASE}:${TAG}"
+          exports:
+            info: IMAGE_TAG
+        - name: 登录腾讯云 CCR
+          script: |
+            echo "登录 CCR ..."
+            if [ -z "${CCR_USER}" ] || [ -z "${CCR_PWD}" ]; then
+              echo "CCR credentials missing (CCR_USER/CCR_PWD)"
+              exit 1
+            fi
+            echo "${CCR_PWD}" | docker login ccr.ccs.tencentyun.com -u "${CCR_USER}" --password-stdin
+        - name: 构建 control 镜像
+          script: |
+            IMAGE_BASE="${IMAGE_TAG%:*}"
+            docker build -f Dockerfile \
+              --build-arg BUILD_TARGET=control \
+              -t "${IMAGE_TAG}" \
+              -t "${IMAGE_BASE}:latest" \
+              .
+        - name: 推送 control 镜像
+          script: |
+            IMAGE_BASE="${IMAGE_TAG%:*}"
+            docker push "${IMAGE_TAG}"
+            docker push "${IMAGE_BASE}:latest"
+            echo "Done: ${IMAGE_TAG} && ${IMAGE_BASE}:latest"
+
+    - name: "gateway 镜像构建并推送 CCR"
+      services:
+        - docker
+      imports: https://cnb.cool/xlj.3jk/hotel-ccr-secrets/-/blob/main/ccr-envs.yml
+      stages:
+        - name: 输出构建信息
+          script: |
+            echo "${CNB_BUILD_USER} 通过 ${CNB_BRANCH} 分支触发了 ${CNB_EVENT} 事件"
+            echo "Commit: ${CNB_COMMIT_SHORT:-latest}"
+            echo "Target: gateway"
+        - name: 设置镜像标签
+          script: |
+            GATEWAY_IMAGE_BASE="ccr.ccs.tencentyun.com/tcb-100047239037-vcqy/traffic-ai-gateway"
+            TAG="${CNB_COMMIT_SHORT:-latest}"
+            echo -n "${GATEWAY_IMAGE_BASE}:${TAG}"
+          exports:
+            info: IMAGE_TAG
+        - name: 登录腾讯云 CCR
+          script: |
+            echo "登录 CCR ..."
+            if [ -z "${CCR_USER}" ] || [ -z "${CCR_PWD}" ]; then
+              echo "CCR credentials missing (CCR_USER/CCR_PWD)"
+              exit 1
+            fi
+            echo "${CCR_PWD}" | docker login ccr.ccs.tencentyun.com -u "${CCR_USER}" --password-stdin
+        - name: 构建 gateway 镜像
+          script: |
+            IMAGE_BASE="${IMAGE_TAG%:*}"
+            docker build -f Dockerfile \
+              --build-arg BUILD_TARGET=gateway \
+              -t "${IMAGE_TAG}" \
+              -t "${IMAGE_BASE}:latest" \
+              .
+        - name: 推送 gateway 镜像
+          script: |
+            IMAGE_BASE="${IMAGE_TAG%:*}"
+            docker push "${IMAGE_TAG}"
+            docker push "${IMAGE_BASE}:latest"
+            echo "Done: ${IMAGE_TAG} && ${IMAGE_BASE}:latest"
+
+master:
+  push:
+    - name: "control 镜像构建并推送 CCR"
+      services:
+        - docker
+      imports: https://cnb.cool/xlj.3jk/hotel-ccr-secrets/-/blob/main/ccr-envs.yml
+      stages:
+        - name: 输出构建信息
+          script: |
+            echo "${CNB_BUILD_USER} 通过 ${CNB_BRANCH} 分支触发了 ${CNB_EVENT} 事件"
+            echo "Commit: ${CNB_COMMIT_SHORT:-latest}"
+            echo "Target: control"
+        - name: 设置镜像标签
+          script: |
+            CONTROL_IMAGE_BASE="ccr.ccs.tencentyun.com/tcb-100047239037-vcqy/traffic-ai-control"
+            TAG="${CNB_COMMIT_SHORT:-latest}"
+            echo -n "${CONTROL_IMAGE_BASE}:${TAG}"
+          exports:
+            info: IMAGE_TAG
+        - name: 登录腾讯云 CCR
+          script: |
+            echo "登录 CCR ..."
+            if [ -z "${CCR_USER}" ] || [ -z "${CCR_PWD}" ]; then
+              echo "CCR credentials missing (CCR_USER/CCR_PWD)"
+              exit 1
+            fi
+            echo "${CCR_PWD}" | docker login ccr.ccs.tencentyun.com -u "${CCR_USER}" --password-stdin
+        - name: 构建 control 镜像
+          script: |
+            IMAGE_BASE="${IMAGE_TAG%:*}"
+            docker build -f Dockerfile \
+              --build-arg BUILD_TARGET=control \
+              -t "${IMAGE_TAG}" \
+              -t "${IMAGE_BASE}:latest" \
+              .
+        - name: 推送 control 镜像
+          script: |
+            IMAGE_BASE="${IMAGE_TAG%:*}"
+            docker push "${IMAGE_TAG}"
+            docker push "${IMAGE_BASE}:latest"
+            echo "Done: ${IMAGE_TAG} && ${IMAGE_BASE}:latest"
+
+    - name: "gateway 镜像构建并推送 CCR"
+      services:
+        - docker
+      imports: https://cnb.cool/xlj.3jk/hotel-ccr-secrets/-/blob/main/ccr-envs.yml
+      stages:
+        - name: 输出构建信息
+          script: |
+            echo "${CNB_BUILD_USER} 通过 ${CNB_BRANCH} 分支触发了 ${CNB_EVENT} 事件"
+            echo "Commit: ${CNB_COMMIT_SHORT:-latest}"
+            echo "Target: gateway"
+        - name: 设置镜像标签
+          script: |
+            GATEWAY_IMAGE_BASE="ccr.ccs.tencentyun.com/tcb-100047239037-vcqy/traffic-ai-gateway"
+            TAG="${CNB_COMMIT_SHORT:-latest}"
+            echo -n "${GATEWAY_IMAGE_BASE}:${TAG}"
+          exports:
+            info: IMAGE_TAG
+        - name: 登录腾讯云 CCR
+          script: |
+            echo "登录 CCR ..."
+            if [ -z "${CCR_USER}" ] || [ -z "${CCR_PWD}" ]; then
+              echo "CCR credentials missing (CCR_USER/CCR_PWD)"
+              exit 1
+            fi
+            echo "${CCR_PWD}" | docker login ccr.ccs.tencentyun.com -u "${CCR_USER}" --password-stdin
+        - name: 构建 gateway 镜像
+          script: |
+            IMAGE_BASE="${IMAGE_TAG%:*}"
+            docker build -f Dockerfile \
+              --build-arg BUILD_TARGET=gateway \
+              -t "${IMAGE_TAG}" \
+              -t "${IMAGE_BASE}:latest" \
+              .
+        - name: 推送 gateway 镜像
+          script: |
+            IMAGE_BASE="${IMAGE_TAG%:*}"
+            docker push "${IMAGE_TAG}"
+            docker push "${IMAGE_BASE}:latest"
+            echo "Done: ${IMAGE_TAG} && ${IMAGE_BASE}:latest"
