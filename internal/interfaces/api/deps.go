@@ -102,12 +102,16 @@ func newControlPlane(cfg *config.Config, db *sql.DB, rdb *redis.Client) *control
 	}
 }
 
-func (p *controlPlane) registerUserAPI(g *gin.RouterGroup) {
+func (p *controlPlane) registerSharedAPI(g *gin.RouterGroup) {
 	p.authHandler.Register(g.Group("/auth"))
 
 	accountGroup := g.Group("/account")
 	accountGroup.Use(middleware.JWTAuth(p.jwtMgr))
 	p.accountHandler.Register(accountGroup)
+}
+
+func (p *controlPlane) registerUserAPI(g *gin.RouterGroup) {
+	p.registerSharedAPI(g)
 
 	meGroup := g.Group("/me")
 	meGroup.Use(middleware.JWTAuth(p.jwtMgr))
@@ -117,11 +121,7 @@ func (p *controlPlane) registerUserAPI(g *gin.RouterGroup) {
 }
 
 func (p *controlPlane) registerAdminAPI(g *gin.RouterGroup) {
-	p.authHandler.Register(g.Group("/auth"))
-
-	accountGroup := g.Group("/account")
-	accountGroup.Use(middleware.JWTAuth(p.jwtMgr))
-	p.accountHandler.Register(accountGroup)
+	p.registerSharedAPI(g)
 
 	// 客户管理端 —— admin 或 super_admin 均可访问
 	customerGroup := g.Group("/admin")
@@ -140,5 +140,32 @@ func (p *controlPlane) registerAdminAPI(g *gin.RouterGroup) {
 	p.monitorHandler.Register(modelMgmtGroup)
 
 	// OAuth callback 不需要认证（浏览器直接跳转，不带 Authorization header）
+	p.oauthHandler.RegisterCallback(g)
+}
+
+// registerUnifiedAPI 单端口合并用户平面与管理平面，避免重复注册 /auth 与 /account。
+func (p *controlPlane) registerUnifiedAPI(g *gin.RouterGroup) {
+	p.registerSharedAPI(g)
+
+	meGroup := g.Group("/me")
+	meGroup.Use(middleware.JWTAuth(p.jwtMgr))
+	p.tokenHandler.Register(meGroup)
+	p.billingHandler.RegisterUser(meGroup)
+	p.modelHandler.RegisterUser(meGroup)
+
+	customerGroup := g.Group("/admin")
+	customerGroup.Use(middleware.JWTAuth(p.jwtMgr))
+	customerGroup.Use(middleware.RequireAdmin())
+	p.billingHandler.RegisterAdmin(customerGroup)
+
+	modelMgmtGroup := g.Group("/admin")
+	modelMgmtGroup.Use(middleware.JWTAuth(p.jwtMgr))
+	modelMgmtGroup.Use(middleware.RequireSuperAdmin())
+	p.modelHandler.Register(modelMgmtGroup)
+	p.autoRouteHandler.Register(modelMgmtGroup)
+	p.rlHandler.Register(modelMgmtGroup)
+	p.oauthHandler.RegisterStart(modelMgmtGroup)
+	p.monitorHandler.Register(modelMgmtGroup)
+
 	p.oauthHandler.RegisterCallback(g)
 }

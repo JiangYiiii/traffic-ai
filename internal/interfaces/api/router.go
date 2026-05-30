@@ -52,10 +52,7 @@ func NewUnifiedControlRouter(cfg *config.Config, db *sql.DB, rdb *redis.Client) 
 	mountControlRoutes(r, cfg, db, rdb, prefix, p, mountOptions{
 		scope:       staticScopeUnified,
 		indexTarget: "/login.html",
-		registerAPI: func(g *gin.RouterGroup) {
-			p.registerUserAPI(g)
-			p.registerAdminAPI(g)
-		},
+		registerAPI: p.registerUnifiedAPI,
 	})
 	mountRootRedirect(r, prefix, "/login.html")
 
