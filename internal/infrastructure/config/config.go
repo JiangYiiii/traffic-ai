@@ -145,14 +145,29 @@ func Load(path string) (*Config, error) {
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return nil, fmt.Errorf("parse config file: %w", err)
 	}
-	if cfg.Server.AdminControlPort <= 0 {
-		cfg.Server.AdminControlPort = 8083
-	}
 	applyUpstreamDefaults(&cfg.Gateway.Upstream)
 	applyCircuitDefaults(&cfg.Gateway.Circuit)
 	overrideFromEnv(&cfg)
+	applyServerPortDefaults(&cfg.Server)
 	once.Do(func() { global = &cfg })
 	return &cfg, nil
+}
+
+func applyServerPortDefaults(s *ServerConfig) {
+	if s.ControlPort <= 0 {
+		s.ControlPort = 8080
+	}
+	if s.AdminControlPort <= 0 {
+		s.AdminControlPort = 8083
+	}
+	if s.GatewayPort <= 0 {
+		s.GatewayPort = 8081
+	}
+}
+
+// UnifiedControlPort reports whether user console and admin backend share one listen port.
+func (s ServerConfig) UnifiedControlPort() bool {
+	return s.ControlPort == s.AdminControlPort
 }
 
 func Get() *Config {
@@ -258,16 +273,31 @@ func overrideFromEnv(cfg *Config) {
 	if v := os.Getenv("REDIS_ADDR"); v != "" {
 		cfg.Redis.Addr = v
 	}
+	if v := os.Getenv("REDIS_PASSWORD"); v != "" {
+		cfg.Redis.Password = v
+	}
 	if v := os.Getenv("JWT_SECRET"); v != "" {
 		cfg.JWT.Secret = v
 	}
 	if v := os.Getenv("AES_KEY"); v != "" {
 		cfg.Crypto.AESKey = v
 	}
+	if v := os.Getenv("CONTROL_PORT"); v != "" {
+		var p int
+		if _, err := fmt.Sscanf(v, "%d", &p); err == nil && p > 0 {
+			cfg.Server.ControlPort = p
+		}
+	}
 	if v := os.Getenv("ADMIN_CONTROL_PORT"); v != "" {
 		var p int
 		if _, err := fmt.Sscanf(v, "%d", &p); err == nil && p > 0 {
 			cfg.Server.AdminControlPort = p
+		}
+	}
+	if v := os.Getenv("GATEWAY_PORT"); v != "" {
+		var p int
+		if _, err := fmt.Sscanf(v, "%d", &p); err == nil && p > 0 {
+			cfg.Server.GatewayPort = p
 		}
 	}
 	if v := os.Getenv("TRAFFIC_UPSTREAM_ENABLED"); v != "" {

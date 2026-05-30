@@ -41,6 +41,29 @@ func NewUserRouter(cfg *config.Config, db *sql.DB, rdb *redis.Client) http.Handl
 	return r
 }
 
+// NewUnifiedControlRouter 用户控制台 + 管理后台合并单端口（control_port == admin_control_port 时使用）。
+func NewUnifiedControlRouter(cfg *config.Config, db *sql.DB, rdb *redis.Client) http.Handler {
+	r := gin.New()
+	r.Use(gin.Recovery())
+	r.Use(httputil.RequestIDMiddleware())
+	r.Use(corsMiddleware())
+
+	r.GET("/healthz", func(c *gin.Context) { c.String(200, "ok") })
+	r.GET("/readyz", readyzHandler(db, rdb))
+
+	p := newControlPlane(cfg, db, rdb)
+	p.registerUserAPI(r)
+	p.registerAdminAPI(r)
+
+	sub, _ := fs.Sub(staticFS, "static")
+	staticH := newScopedStaticHandler(sub, staticScopeUnified)
+	r.GET("/", func(c *gin.Context) { c.Redirect(http.StatusFound, "/login.html") })
+	r.GET("/docs", func(c *gin.Context) { c.Redirect(http.StatusFound, "/docs.html") })
+	r.NoRoute(gin.WrapH(staticH))
+
+	return r
+}
+
 // NewAdminRouter 管理后台平面（管理员 API + 管理端静态资源；不包含 /me）。
 func NewAdminRouter(cfg *config.Config, db *sql.DB, rdb *redis.Client) http.Handler {
 	r := gin.New()

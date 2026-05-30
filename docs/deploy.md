@@ -74,6 +74,8 @@ cp deploy/.env.example deploy/.env
 # 编辑 config.prod.yaml 与 deploy/.env，填写 MySQL/Redis/密钥/域名
 ```
 
+**环境变量完整清单**：[deploy/ENV.production.md](../deploy/ENV.production.md)
+
 **生产必改项：**
 
 | 配置 | 说明 |
@@ -148,6 +150,7 @@ make build
 | `deploy/seed/001_baseline.sql` | 基线配置数据 |
 | `configs/config.prod.yaml.example` | 生产配置模板 |
 | `deploy/.env.example` | 环境变量模板 |
+| `deploy/ENV.production.md` | **生产环境变量完整清单** |
 | `migrations/` | 全部 DDL 版本 |
 | `Dockerfile` | control / gateway 镜像构建 |
 | `.cnb.yml` | CNB 云原生构建流水线 |

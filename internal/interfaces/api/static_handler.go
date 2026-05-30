@@ -11,6 +11,7 @@ type staticScope int
 const (
 	staticScopeUser staticScope = iota
 	staticScopeAdmin
+	staticScopeUnified
 )
 
 // newScopedStaticHandler 按平面过滤可访问的静态资源（用户平面与管理平面分端口）。
@@ -78,6 +79,8 @@ func staticPathAllowed(scope staticScope, cleanPath string) bool {
 		}
 		_, bad := blocked[cleanPath]
 		return !bad
+	case staticScopeUnified:
+		return true
 	default:
 		return false
 	}

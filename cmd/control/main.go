@@ -1,9 +1,11 @@
-// @ai_doc_flow 控制面入口: 加载配置 → 初始化 DB/Redis → 用户平面 + 管理平面双 HTTP 服务
-// 控制面承载: 用户认证、API Key 管理、模型配置、计费、审计、控制台前端（用户端口与管理端口分离）
+// @ai_doc_flow 控制面入口: 加载配置 → 初始化 DB/Redis → 用户平面 + 管理平面 HTTP 服务
+// 控制面承载: 用户认证、API Key 管理、模型配置、计费、审计、控制台前端
+// 当 control_port == admin_control_port 时合并为单端口；否则双端口分离
 package main
 
 import (
 	"context"
+	"database/sql"
 	"flag"
 	"fmt"
 	"net/http"
@@ -12,6 +14,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/redis/go-redis/v9"
 	"github.com/trailyai/traffic-ai/internal/infrastructure/config"
 	mysqlpkg "github.com/trailyai/traffic-ai/internal/infrastructure/persistence/mysql"
 	redispkg "github.com/trailyai/traffic-ai/internal/infrastructure/persistence/redis"
@@ -44,31 +47,15 @@ func main() {
 	}
 	defer rdb.Close()
 
-	userRouter := api.NewUserRouter(cfg, db, rdb)
-	adminRouter := api.NewAdminRouter(cfg, db, rdb)
-
-	userSrv := &http.Server{
-		Addr:    fmt.Sprintf(":%d", cfg.Server.ControlPort),
-		Handler: userRouter,
+	servers := buildControlServers(cfg, db, rdb)
+	for _, srv := range servers {
+		go func(s *http.Server) {
+			logger.L.Infof("control plane listening on %s", s.Addr)
+			if err := s.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				logger.L.Fatalf("control plane listen: %v", err)
+			}
+		}(srv)
 	}
-	adminSrv := &http.Server{
-		Addr:    fmt.Sprintf(":%d", cfg.Server.AdminControlPort),
-		Handler: adminRouter,
-	}
-
-	go func() {
-		logger.L.Infof("user control plane (console) starting on :%d", cfg.Server.ControlPort)
-		if err := userSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			logger.L.Fatalf("user plane listen: %v", err)
-		}
-	}()
-
-	go func() {
-		logger.L.Infof("admin control plane starting on :%d", cfg.Server.AdminControlPort)
-		if err := adminSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			logger.L.Fatalf("admin plane listen: %v", err)
-		}
-	}()
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
@@ -77,6 +64,30 @@ func main() {
 	logger.L.Info("shutting down control planes...")
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	_ = userSrv.Shutdown(ctx)
-	_ = adminSrv.Shutdown(ctx)
+	for _, srv := range servers {
+		_ = srv.Shutdown(ctx)
+	}
+}
+
+func buildControlServers(cfg *config.Config, db *sql.DB, rdb *redis.Client) []*http.Server {
+	if cfg.Server.UnifiedControlPort() {
+		port := cfg.Server.ControlPort
+		logger.L.Infof("unified control plane (user + admin) on :%d", port)
+		return []*http.Server{{
+			Addr:    fmt.Sprintf(":%d", port),
+			Handler: api.NewUnifiedControlRouter(cfg, db, rdb),
+		}}
+	}
+
+	logger.L.Infof("split control planes: user :%d, admin :%d", cfg.Server.ControlPort, cfg.Server.AdminControlPort)
+	return []*http.Server{
+		{
+			Addr:    fmt.Sprintf(":%d", cfg.Server.ControlPort),
+			Handler: api.NewUserRouter(cfg, db, rdb),
+		},
+		{
+			Addr:    fmt.Sprintf(":%d", cfg.Server.AdminControlPort),
+			Handler: api.NewAdminRouter(cfg, db, rdb),
+		},
+	}
 }

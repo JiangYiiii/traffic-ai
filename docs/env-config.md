@@ -8,9 +8,9 @@
 
 | YAML 路径 | 默认值 | 说明 |
 |-----------|--------|------|
-| `server.control_port` | 8080 | 客户端（控制台）端口（用户 API + 登录/注册/控制台静态页） |
-| `server.admin_control_port` | 8083 | 管理后台端口（客户管理端 + 模型管理端；管理员 API + `admin-login.html` / `admin.html`）；可用环境变量 `ADMIN_CONTROL_PORT` 覆盖 |
-| `server.gateway_port` | 8081 | 数据面端口（调用端请求入口，网关转发） |
+| `server.control_port` | 8080 | 客户端（控制台）端口；可用环境变量 `CONTROL_PORT` 覆盖 |
+| `server.admin_control_port` | 8083 | 管理后台端口；可用环境变量 `ADMIN_CONTROL_PORT` 覆盖。**与 `control_port` 相同时合并为单端口** |
+| `server.gateway_port` | 8081 | 数据面端口；可用环境变量 `GATEWAY_PORT` 覆盖 |
 | `server.mode` | debug | 运行模式: `debug` / `release` |
 
 ### database — MySQL
@@ -18,10 +18,10 @@
 | YAML 路径 | 环境变量覆盖 | 默认值 | 说明 |
 |-----------|-------------|--------|------|
 | `database.host` | `DB_HOST` | 127.0.0.1 | MySQL 地址 |
-| `database.port` | — | 3306 | MySQL 端口 |
-| `database.user` | — | root | 用户名 |
+| `database.port` | `DB_PORT` | 3306 | MySQL 端口 |
+| `database.user` | `DB_USER` | root | 用户名 |
 | `database.password` | `DB_PASSWORD` | (空) | 密码 |
-| `database.name` | — | traffic_ai | 数据库名 |
+| `database.name` | `DB_NAME` | traffic_ai | 数据库名 |
 | `database.max_open_conns` | — | 50 | 最大连接数 |
 | `database.max_idle_conns` | — | 10 | 最大空闲连接 |
 | `database.conn_max_lifetime` | — | 3600 | 连接最大生存时间(秒) |
@@ -31,7 +31,7 @@
 | YAML 路径 | 环境变量覆盖 | 默认值 | 说明 |
 |-----------|-------------|--------|------|
 | `redis.addr` | `REDIS_ADDR` | 127.0.0.1:6379 | Redis 地址 |
-| `redis.password` | — | (空) | 密码 |
+| `redis.password` | `REDIS_PASSWORD` | (空) | 密码 |
 | `redis.db` | — | 0 | DB 编号 |
 | `redis.pool_size` | — | 20 | 连接池大小 |
 
@@ -128,7 +128,11 @@ DB 表 `rate_limit_rules` 里的具体规则优先级高于此处默认值；缺
 
 示例：本机开发为 `http://127.0.0.1:8083/admin/oauth/callback`；生产为 `https://你的管理后台域名/admin/oauth/callback`。
 
-**说明：** 当前 `internal/infrastructure/config/config.go` 中 **未** 对 OAuth 做环境变量覆盖，上线时请在 `configs/config.yaml`（或你们部署使用的等价配置源）中填写；若日后需要 `OAUTH_OPENAI_CLIENT_ID` 等变量，需另行在加载逻辑中增加映射。
+**说明：** 当前 `internal/infrastructure/config/config.go` 中 **未** 对 OAuth 做环境变量覆盖，上线时请在 `configs/config.yaml`（或挂载的配置文件）中填写。
+
+## 生产上线环境变量速查
+
+完整清单（必配 / 可选 / 仅 YAML）见 **[deploy/ENV.production.md](../deploy/ENV.production.md)** 与 **[deploy/.env.example](../deploy/.env.example)**。
 
 ## 快速启动
 
