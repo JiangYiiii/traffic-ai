@@ -11,16 +11,20 @@ import (
 // ---- Model ----
 
 type CreateModelReq struct {
-	ModelName       string `json:"model_name" binding:"required,max=100"`
-	Provider        string `json:"provider" binding:"required,max=50"`
-	ModelType       string `json:"model_type" binding:"max=30"`
-	BillingType     string `json:"billing_type" binding:"max=20"`
-	InputPrice      int64  `json:"input_price"`
-	OutputPrice     int64  `json:"output_price"`
-	ReasoningPrice  int64  `json:"reasoning_price"`
-	PerRequestPrice int64  `json:"per_request_price"`
-	IsActive        *bool  `json:"is_active"`
-	IsListed        *bool  `json:"is_listed"`
+	ModelName           string   `json:"model_name" binding:"required,max=100"`
+	Provider            string   `json:"provider" binding:"required,max=50"`
+	ModelType           string   `json:"model_type" binding:"max=30"`
+	BillingType         string   `json:"billing_type" binding:"max=20"`
+	InputPrice          int64    `json:"input_price"`
+	OutputPrice         int64    `json:"output_price"`
+	ReasoningPrice      int64    `json:"reasoning_price"`
+	PerRequestPrice     int64    `json:"per_request_price"`
+	IsActive            *bool    `json:"is_active"`
+	IsListed            *bool    `json:"is_listed"`
+	IsVirtual           bool     `json:"is_virtual"`
+	VirtualType         string   `json:"virtual_type"`
+	ContextWindowTokens int      `json:"context_window_tokens"`
+	CapabilityTags      []string `json:"capability_tags"`
 	// AccountCredential 非空时，创建模型后自动创建一条默认模型账号（内置商家使用目录默认端点；自定义商家须配合 AccountEndpoint）。
 	AccountCredential string `json:"account_credential"`
 	AccountEndpoint   string `json:"account_endpoint"`
@@ -62,16 +66,20 @@ type PlaygroundReq struct {
 
 func (r *CreateModelReq) ToDomain() *domainModel.Model {
 	m := &domainModel.Model{
-		ModelName:       r.ModelName,
-		Provider:        r.Provider,
-		ModelType:       r.ModelType,
-		BillingType:     domainModel.BillingType(r.BillingType),
-		InputPrice:      r.InputPrice,
-		OutputPrice:     r.OutputPrice,
-		ReasoningPrice:  r.ReasoningPrice,
-		PerRequestPrice: r.PerRequestPrice,
-		IsActive:        true,
-		IsListed:        false, // 默认不上架
+		ModelName:           r.ModelName,
+		Provider:            r.Provider,
+		ModelType:           r.ModelType,
+		BillingType:         domainModel.BillingType(r.BillingType),
+		InputPrice:          r.InputPrice,
+		OutputPrice:         r.OutputPrice,
+		ReasoningPrice:      r.ReasoningPrice,
+		PerRequestPrice:     r.PerRequestPrice,
+		IsActive:            true,
+		IsListed:            false, // 默认不上架
+		IsVirtual:           r.IsVirtual,
+		VirtualType:         r.VirtualType,
+		ContextWindowTokens: r.ContextWindowTokens,
+		CapabilityTags:      r.CapabilityTags,
 	}
 	if m.ModelType == "" {
 		m.ModelType = "chat"
@@ -89,31 +97,39 @@ func (r *CreateModelReq) ToDomain() *domainModel.Model {
 }
 
 type UpdateModelReq struct {
-	ModelName       string `json:"model_name" binding:"required,max=100"`
-	Provider        string `json:"provider" binding:"required,max=50"`
-	ModelType       string `json:"model_type"`
-	BillingType     string `json:"billing_type"`
-	InputPrice      int64  `json:"input_price"`
-	OutputPrice     int64  `json:"output_price"`
-	ReasoningPrice  int64  `json:"reasoning_price"`
-	PerRequestPrice int64  `json:"per_request_price"`
-	IsActive        *bool  `json:"is_active"`
-	IsListed        *bool  `json:"is_listed"`
+	ModelName           string   `json:"model_name" binding:"required,max=100"`
+	Provider            string   `json:"provider" binding:"required,max=50"`
+	ModelType           string   `json:"model_type"`
+	BillingType         string   `json:"billing_type"`
+	InputPrice          int64    `json:"input_price"`
+	OutputPrice         int64    `json:"output_price"`
+	ReasoningPrice      int64    `json:"reasoning_price"`
+	PerRequestPrice     int64    `json:"per_request_price"`
+	IsActive            *bool    `json:"is_active"`
+	IsListed            *bool    `json:"is_listed"`
+	IsVirtual           bool     `json:"is_virtual"`
+	VirtualType         string   `json:"virtual_type"`
+	ContextWindowTokens int      `json:"context_window_tokens"`
+	CapabilityTags      []string `json:"capability_tags"`
 }
 
 func (r *UpdateModelReq) ToDomain(id int64) *domainModel.Model {
 	m := &domainModel.Model{
-		ID:              id,
-		ModelName:       r.ModelName,
-		Provider:        r.Provider,
-		ModelType:       r.ModelType,
-		BillingType:     domainModel.BillingType(r.BillingType),
-		InputPrice:      r.InputPrice,
-		OutputPrice:     r.OutputPrice,
-		ReasoningPrice:  r.ReasoningPrice,
-		PerRequestPrice: r.PerRequestPrice,
-		IsActive:        true,
-		IsListed:        false,
+		ID:                  id,
+		ModelName:           r.ModelName,
+		Provider:            r.Provider,
+		ModelType:           r.ModelType,
+		BillingType:         domainModel.BillingType(r.BillingType),
+		InputPrice:          r.InputPrice,
+		OutputPrice:         r.OutputPrice,
+		ReasoningPrice:      r.ReasoningPrice,
+		PerRequestPrice:     r.PerRequestPrice,
+		IsActive:            true,
+		IsListed:            false,
+		IsVirtual:           r.IsVirtual,
+		VirtualType:         r.VirtualType,
+		ContextWindowTokens: r.ContextWindowTokens,
+		CapabilityTags:      r.CapabilityTags,
 	}
 	if r.IsActive != nil {
 		m.IsActive = *r.IsActive
@@ -125,43 +141,51 @@ func (r *UpdateModelReq) ToDomain(id int64) *domainModel.Model {
 }
 
 type ModelItem struct {
-	ID                int64  `json:"id"`
-	ModelName         string `json:"model_name"`
-	Provider          string `json:"provider"`
-	ModelType         string `json:"model_type"`
-	BillingType       string `json:"billing_type"`
-	InputPrice        int64  `json:"input_price"`
-	OutputPrice       int64  `json:"output_price"`
-	ReasoningPrice    int64  `json:"reasoning_price"`
-	PerRequestPrice   int64  `json:"per_request_price"`
-	IsActive          bool   `json:"is_active"`
-	IsListed          bool   `json:"is_listed"`
-	LastTestPassed    *bool  `json:"last_test_passed"`
-	LastTestAt        string `json:"last_test_at,omitempty"`
-	LastTestLatencyMs *int   `json:"last_test_latency_ms,omitempty"`
-	LastTestError     string `json:"last_test_error,omitempty"`
-	CreatedAt         string `json:"created_at"`
-	UpdatedAt         string `json:"updated_at"`
+	ID                  int64    `json:"id"`
+	ModelName           string   `json:"model_name"`
+	Provider            string   `json:"provider"`
+	ModelType           string   `json:"model_type"`
+	BillingType         string   `json:"billing_type"`
+	InputPrice          int64    `json:"input_price"`
+	OutputPrice         int64    `json:"output_price"`
+	ReasoningPrice      int64    `json:"reasoning_price"`
+	PerRequestPrice     int64    `json:"per_request_price"`
+	IsActive            bool     `json:"is_active"`
+	IsListed            bool     `json:"is_listed"`
+	IsVirtual           bool     `json:"is_virtual"`
+	VirtualType         string   `json:"virtual_type"`
+	ContextWindowTokens int      `json:"context_window_tokens"`
+	CapabilityTags      []string `json:"capability_tags"`
+	LastTestPassed      *bool    `json:"last_test_passed"`
+	LastTestAt          string   `json:"last_test_at,omitempty"`
+	LastTestLatencyMs   *int     `json:"last_test_latency_ms,omitempty"`
+	LastTestError       string   `json:"last_test_error,omitempty"`
+	CreatedAt           string   `json:"created_at"`
+	UpdatedAt           string   `json:"updated_at"`
 }
 
 func ToModelItem(m *domainModel.Model) ModelItem {
 	item := ModelItem{
-		ID:                m.ID,
-		ModelName:         m.ModelName,
-		Provider:          m.Provider,
-		ModelType:         m.ModelType,
-		BillingType:       string(m.BillingType),
-		InputPrice:        m.InputPrice,
-		OutputPrice:       m.OutputPrice,
-		ReasoningPrice:    m.ReasoningPrice,
-		PerRequestPrice:   m.PerRequestPrice,
-		IsActive:          m.IsActive,
-		IsListed:          m.IsListed,
-		LastTestPassed:    m.LastTestPassed,
-		LastTestLatencyMs: m.LastTestLatencyMs,
-		LastTestError:     m.LastTestError,
-		CreatedAt:         m.CreatedAt.Format(time.RFC3339),
-		UpdatedAt:         m.UpdatedAt.Format(time.RFC3339),
+		ID:                  m.ID,
+		ModelName:           m.ModelName,
+		Provider:            m.Provider,
+		ModelType:           m.ModelType,
+		BillingType:         string(m.BillingType),
+		InputPrice:          m.InputPrice,
+		OutputPrice:         m.OutputPrice,
+		ReasoningPrice:      m.ReasoningPrice,
+		PerRequestPrice:     m.PerRequestPrice,
+		IsActive:            m.IsActive,
+		IsListed:            m.IsListed,
+		IsVirtual:           m.IsVirtual,
+		VirtualType:         m.VirtualType,
+		ContextWindowTokens: m.ContextWindowTokens,
+		CapabilityTags:      m.CapabilityTags,
+		LastTestPassed:      m.LastTestPassed,
+		LastTestLatencyMs:   m.LastTestLatencyMs,
+		LastTestError:       m.LastTestError,
+		CreatedAt:           m.CreatedAt.Format(time.RFC3339),
+		UpdatedAt:           m.UpdatedAt.Format(time.RFC3339),
 	}
 	if m.LastTestAt != nil {
 		item.LastTestAt = m.LastTestAt.UTC().Format(time.RFC3339)

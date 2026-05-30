@@ -1,48 +1,51 @@
+# 生产环境配置模板 — 复制为 config.prod.yaml 后填写，勿提交含密钥的文件
+# 敏感项可通过环境变量覆盖，见 docs/env-config.md 与 deploy/.env.example
+
 server:
-  control_port: 18080
+  control_port: 8080
   admin_control_port: 8083
-  gateway_port: 18081
-  mode: debug  # debug | release
+  gateway_port: 8081
+  mode: release
 
 database:
-  host: 127.0.0.1
+  host: 127.0.0.1          # 或 DB_HOST 环境变量
   port: 3306
-  user: root
-  password: ""
+  user: traffic_ai
+  password: ""             # 或 DB_PASSWORD 环境变量
   name: traffic_ai
   max_open_conns: 50
   max_idle_conns: 10
   conn_max_lifetime: 3600
 
 redis:
-  addr: 127.0.0.1:6379
+  addr: 127.0.0.1:6379     # 或 REDIS_ADDR 环境变量
   password: ""
   db: 0
   pool_size: 20
 
 jwt:
-  secret: "traffic-ai-dev-jwt-secret-change-in-prod"
-  access_ttl: 7200       # 2 hours
-  refresh_ttl: 604800     # 7 days
+  secret: "CHANGE_ME_jwt_secret_min_32_chars"   # 或 JWT_SECRET
+  access_ttl: 7200
+  refresh_ttl: 604800
 
 crypto:
-  aes_key: "traffic-ai-dev-aes256-key!!"  # 32 bytes for AES-256
+  aes_key: "CHANGE_ME_32_byte_aes_key!!!!!!"    # 或 AES_KEY，必须 32 字节
 
 email:
   smtp_host: ""
   smtp_port: 587
   username: ""
   password: ""
-  from: "noreply@4tk.ai"
+  from: "noreply@your-domain.com"
 
 log:
-  level: debug   # debug | info | warn | error
-  format: json   # json | text
-  output: stdout # stdout | file
+  level: info
+  format: json
+  output: stdout
   file_path: ""
 
 oauth:
-  public_base_url: "http://127.0.0.1:8083"  # 回调地址前缀，部署时改为实际域名
+  public_base_url: "https://admin.your-domain.com"
   providers:
     openai:
       client_id: ""

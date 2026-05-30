@@ -76,6 +76,12 @@ func (r *UserRepo) UpdatePassword(ctx context.Context, userID int64, passwordHas
 	return err
 }
 
+func (r *UserRepo) UpdateRoleAndStatus(ctx context.Context, userID int64, role string, status int8) error {
+	const q = `UPDATE users SET role = ?, status = ? WHERE id = ?`
+	_, err := r.db.ExecContext(ctx, q, role, status, userID)
+	return err
+}
+
 func (r *UserRepo) ListPaged(ctx context.Context, emailLike string, page, pageSize int) ([]*domain.User, int64, error) {
 	where := "WHERE 1=1"
 	args := []interface{}{}

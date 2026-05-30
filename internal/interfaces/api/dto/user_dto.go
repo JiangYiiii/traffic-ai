@@ -24,6 +24,11 @@ func ToAdminUserItem(u *domain.User) AdminUserItem {
 	}
 }
 
+type AdminUpdateUserReq struct {
+	Role     *string `json:"role"`
+	IsActive *bool   `json:"is_active"`
+}
+
 func ToAdminUserList(users []*domain.User) []AdminUserItem {
 	items := make([]AdminUserItem, 0, len(users))
 	for _, u := range users {

@@ -39,6 +39,7 @@ func NewRouter(cfg *config.Config, db *sql.DB, rdb *redis.Client, metrics *Metri
 	tokenRepo := mysqlrepo.NewTokenRepo(db)
 	modelRepo := mysqlrepo.NewModelRepo(db)
 	modelAccountRepo := mysqlrepo.NewModelAccountRepo(db)
+	autoRouteRepo := mysqlrepo.NewAutoRouteRepo(db)
 	tgRepo := mysqlrepo.NewTokenGroupRepo(db)
 	rlRuleRepo := mysqlrepo.NewRateLimitRuleRepo(db)
 	balanceRepo := mysqlrepo.NewBalanceRepo(db)
@@ -57,7 +58,7 @@ func NewRouter(cfg *config.Config, db *sql.DB, rdb *redis.Client, metrics *Metri
 	rateLimiter := redisinfra.NewRedisRateLimiter(rdb, rlUC.ActiveRules)
 
 	// 路由引擎
-	routingSvc := routinguc.NewUseCase(tgRepo, modelRepo, modelAccountRepo, aesKey, cfg.OAuth, breaker)
+	routingSvc := routinguc.NewUseCase(tgRepo, modelRepo, modelAccountRepo, aesKey, cfg.OAuth, breaker, autoRouteRepo)
 
 	// 计费
 	billingSvc := billinguc.NewUseCase(db, balanceRepo, balanceLogRepo, redeemRepo, balanceCache)

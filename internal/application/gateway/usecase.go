@@ -43,18 +43,27 @@ type MetricsSink interface {
 // noopSink 兜底实现；UseCase.metrics 为 nil 时使用，避免所有调用点都要判空。
 type noopSink struct{}
 
-func (noopSink) IncRequest(string, string, string, string)          {}
-func (noopSink) ObserveUpstreamLatency(string, string, float64)     {}
-func (noopSink) IncInflight(string, string)                         {}
-func (noopSink) DecInflight(string, string)                         {}
-func (noopSink) IncRatelimitReject(string, string)                  {}
-func (noopSink) IncRetry(string, string)                            {}
+func (noopSink) IncRequest(string, string, string, string)      {}
+func (noopSink) ObserveUpstreamLatency(string, string, float64) {}
+func (noopSink) IncInflight(string, string)                     {}
+func (noopSink) DecInflight(string, string)                     {}
+func (noopSink) IncRatelimitReject(string, string)              {}
+func (noopSink) IncRetry(string, string)                        {}
 
 // ChatRequest 是 OpenAI Chat Completions 请求的精简解析结构。
 type ChatRequest struct {
 	Model    string          `json:"model"`
 	Stream   bool            `json:"stream"`
 	Messages json.RawMessage `json:"messages"`
+}
+
+func rewriteRequestModel(reqBody []byte, resolvedModel string) ([]byte, error) {
+	var body map[string]any
+	if err := json.Unmarshal(reqBody, &body); err != nil {
+		return nil, err
+	}
+	body["model"] = resolvedModel
+	return json.Marshal(body)
 }
 
 // maxErrorMessageBytes 限制写入 usage_logs.error_message 的字节数。
@@ -219,21 +228,38 @@ func (uc *UseCase) ChatCompletions(
 		return false, errcode.ErrBadRequest
 	}
 
+	requestedModel := chatReq.Model
+
 	// 1. 首次路由选择（提前到限流之前，以便构造 EstimatedTokens 做 TPM 预估）
-	firstRoute, err := uc.routingSvc.SelectModelAccount(ctx, tok.TokenGroup, chatReq.Model, "openai")
+	firstRoute, err := uc.routingSvc.SelectRoute(ctx, routing.RouteRequest{
+		TokenGroup:      tok.TokenGroup,
+		RequestedModel:  requestedModel,
+		Protocol:        "openai",
+		UserID:          tok.UserID,
+		APIKeyID:        tok.ID,
+		EstimatedTokens: int(estimateTokens(nil, chatReq.Stream)),
+		Stream:          chatReq.Stream,
+	})
 	if err != nil {
 		return false, err
+	}
+	if firstRoute.ResolvedModel != "" && firstRoute.ResolvedModel != chatReq.Model {
+		reqBody, err = rewriteRequestModel(reqBody, firstRoute.ResolvedModel)
+		if err != nil {
+			return false, errcode.ErrBadRequest
+		}
+		chatReq.Model = firstRoute.ResolvedModel
 	}
 
 	// 2. 限流（RPM / Concurrent / TPM）
 	rlReq := &ratelimit.CheckRequest{
 		UserID:          tok.UserID,
 		APIKeyID:        tok.ID,
-		Model:           chatReq.Model,
+		Model:           firstRoute.Model.ModelName,
 		EstimatedTokens: estimateTokens(firstRoute.Model, chatReq.Stream),
 	}
 	if err := uc.rateLimiter.Allow(ctx, rlReq); err != nil {
-		uc.recordRateLimitReject(err, requestID, tok, chatReq.Model)
+		uc.recordRateLimitReject(err, requestID, tok, firstRoute.Model.ModelName)
 		return false, err
 	}
 	defer uc.rateLimiter.Release(ctx, rlReq)
@@ -288,7 +314,16 @@ func (uc *UseCase) ChatCompletions(
 		isLast := attempt == maxAttempts-1
 
 		if attempt > 0 {
-			r2, rerr := uc.routingSvc.SelectModelAccountExcluding(ctx, tok.TokenGroup, chatReq.Model, "openai", idsFromTried(tried))
+			r2, rerr := uc.routingSvc.SelectRoute(ctx, routing.RouteRequest{
+				TokenGroup:        tok.TokenGroup,
+				RequestedModel:    requestedModel,
+				Protocol:          "openai",
+				UserID:            tok.UserID,
+				APIKeyID:          tok.ID,
+				EstimatedTokens:   int(estimateTokens(route.Model, chatReq.Stream)),
+				Stream:            chatReq.Stream,
+				ExcludeAccountIDs: idsFromTried(tried),
+			})
 			if rerr != nil {
 				// 没有可用账号了：用上次的结算信息落日志并返回上次错误。
 				logger.L.Warnw("fallback exhausted, no more accounts",
@@ -306,6 +341,23 @@ func (uc *UseCase) ChatCompletions(
 			if !r2.Model.IsListed {
 				uc.settleAndLog(tok, route, requestID, chatReq, start, &ProxyResult{ErrorMessage: "model not listed on fallback"}, estimatedCost, callCtx)
 				return false, errcode.ErrModelNotListed
+			}
+			if r2.Model.ID != route.Model.ID {
+				if err := uc.billingSvc.Settle(ctx, tok.UserID, 0, estimatedCost, requestID, "auto fallback refund"); err != nil {
+					return false, err
+				}
+				estimatedCost = uc.estimateCost(r2.Model, chatReq.Stream)
+				if err := uc.billingSvc.CheckBalance(ctx, tok.UserID, estimatedCost); err != nil {
+					return false, err
+				}
+				if err := uc.billingSvc.PreDeduct(ctx, tok.UserID, estimatedCost, requestID); err != nil {
+					return false, err
+				}
+				reqBody, err = rewriteRequestModel(reqBody, r2.Model.ModelName)
+				if err != nil {
+					return false, errcode.ErrBadRequest
+				}
+				chatReq.Model = r2.Model.ModelName
 			}
 			route = r2
 		}
@@ -729,14 +781,22 @@ func (uc *UseCase) settleAndLog(
 	go func() {
 		ctx := context.Background()
 
-		detail := fmt.Sprintf("model=%s input=%d output=%d reasoning=%d",
-			chatReq.Model, result.InputTokens, result.OutputTokens, result.ReasoningTokens)
+		requestedModel := route.RequestedModel
+		if requestedModel == "" {
+			requestedModel = chatReq.Model
+		}
+		resolvedModel := route.ResolvedModel
+		if resolvedModel == "" {
+			resolvedModel = route.Model.ModelName
+		}
+		detail := fmt.Sprintf("requested_model=%s resolved_model=%s input=%d output=%d reasoning=%d",
+			requestedModel, resolvedModel, result.InputTokens, result.OutputTokens, result.ReasoningTokens)
 		if err := uc.billingSvc.Settle(ctx, tok.UserID, actualCost, preDeducted, requestID, detail); err != nil {
 			logger.L.Errorw("settle billing failed",
 				"request_id", requestID,
 				"user_id", tok.UserID,
 				"api_key_id", tok.ID,
-				"model", chatReq.Model,
+				"model", resolvedModel,
 				"account_id", route.Account.ID,
 				"protocol", protocol,
 				"status", status,
@@ -749,8 +809,14 @@ func (uc *UseCase) settleAndLog(
 			RequestID:           requestID,
 			UserID:              tok.UserID,
 			APIKeyID:            tok.ID,
-			Model:               chatReq.Model,
+			Model:               resolvedModel,
+			RequestedModel:      requestedModel,
+			ResolvedModel:       resolvedModel,
 			ModelAccountID:      route.Account.ID,
+			AutoRoutePolicyID:   route.PolicyID,
+			RouteMode:           route.Mode,
+			RouteReason:         route.Reason,
+			RouteScore:          route.Score,
 			Protocol:            protocol,
 			IsStream:            chatReq.Stream,
 			Status:              status,
@@ -772,7 +838,7 @@ func (uc *UseCase) settleAndLog(
 				"request_id", requestID,
 				"user_id", tok.UserID,
 				"api_key_id", tok.ID,
-				"model", chatReq.Model,
+				"model", resolvedModel,
 				"account_id", route.Account.ID,
 				"protocol", protocol,
 				"status", status,
@@ -783,7 +849,7 @@ func (uc *UseCase) settleAndLog(
 
 		if uc.monitorCounter != nil {
 			uc.monitorCounter.Record(ctx, redisinfra.MonitorEvent{
-				ModelName:   chatReq.Model,
+				ModelName:   resolvedModel,
 				AccountID:   route.Account.ID,
 				IsError:     status == "error",
 				TotalTokens: result.TotalTokens,

@@ -54,14 +54,6 @@
               data-i18n="nav.admin"
               >管理员后台</a
             >
-            <a
-              id="superAdminLinkBtn"
-              class="btn btn-outline-secondary btn-sm"
-              style="display: none"
-              href="/super-admin.html"
-              data-i18n="nav.superAdmin"
-              >超级管理员后台</a
-            >
             <button type="button" id="logoutBtn" class="btn btn-dark btn-sm" data-i18n="nav.logout">退出登录</button>
           </div>
         </div>
@@ -121,119 +113,121 @@
           </div>
         </div>
 
-        <div class="console-utility-grid mb-4">
-          <section class="card console-balance-card" id="balanceAlertSection">
-            <div class="console-section-head">
+        <div class="console-ops-grid mb-4">
+          <section class="card console-ops-card console-balance-card" id="balanceAlertSection">
+            <div class="console-section-head console-section-head--compact console-ops-card__head">
               <div class="console-section-copy">
                 <h3 class="mb-0" data-i18n="app.balanceAlertTitle">余额邮件提醒</h3>
-                <p class="console-section-desc" data-i18n="app.balanceAlertHint">
+                <p class="console-section-desc console-ops-card__desc" data-i18n="app.balanceAlertHint">
                   当账户余额低于下方金额时，向您的注册邮箱发送一封提醒（每个「低于阈值」周期至多一封；充值回到阈值以上后会再次提醒）。
                 </p>
               </div>
               <span class="console-inline-tip console-inline-tip--status" id="balanceAlertSummaryText">—</span>
             </div>
-            <div class="console-form-panel console-form-panel--plain">
-              <form id="balanceAlertForm" class="row g-2 g-sm-3 align-items-end balance-alert-form">
-                <div class="col-12 col-sm-auto">
-                  <label class="balance-alert-toggle mb-0" for="balanceAlertEnabled">
-                    <input type="checkbox" id="balanceAlertEnabled" checked />
-                    <span data-i18n="app.balanceAlertEnable">启用余额提醒</span>
-                  </label>
-                </div>
-                <div class="col-6 col-sm-4 col-md-3">
+            <div class="console-ops-card__body">
+              <form id="balanceAlertForm" class="balance-alert-form console-ops-inline-form">
+                <label class="balance-alert-toggle" for="balanceAlertEnabled">
+                  <input type="checkbox" id="balanceAlertEnabled" checked />
+                  <span data-i18n="app.balanceAlertEnable">启用余额提醒</span>
+                </label>
+                <div class="console-ops-field console-ops-field--threshold">
                   <label for="balanceAlertUsd" class="small" data-i18n="app.balanceAlertUsdLabel">提醒阈值（USD）</label>
                   <input id="balanceAlertUsd" type="number" min="0.01" step="0.01" value="10" required />
                 </div>
-                <div class="col-6 col-sm-auto">
-                  <button type="submit" class="balance-alert-save-btn" data-i18n="app.balanceAlertSave">保存设置</button>
+                <div class="console-btn-bar console-btn-bar--end">
+                  <button type="submit" class="console-btn" data-i18n="app.balanceAlertSave">保存设置</button>
                 </div>
-                <div class="col-12">
-                  <div id="balanceAlertMsg" class="msg balance-alert-msg mb-0"></div>
-                </div>
+                <div id="balanceAlertMsg" class="msg balance-alert-msg console-ops-form-msg"></div>
               </form>
             </div>
           </section>
 
-          <section class="card console-action-card" id="redeemSection">
-            <div class="console-section-head console-section-head--compact">
+          <section class="card console-ops-card console-action-card" id="redeemSection">
+            <div class="console-section-head console-section-head--compact console-ops-card__head">
               <div class="console-section-copy">
-                <h3 data-i18n="app.redeem">兑换码充值</h3>
-                <p class="console-section-desc" data-i18n="app.redeemDesc">
+                <h3 class="mb-0" data-i18n="app.redeem">兑换码充值</h3>
+                <p class="console-section-desc console-ops-card__desc" data-i18n="app.redeemDesc">
                   使用兑换码即时充值，结果会同步写入余额流水。
                 </p>
               </div>
             </div>
-            <form id="redeemForm" class="grid console-simple-form">
-              <div>
-                <label for="redeemCode" data-i18n="app.codeLabel">兑换码</label>
-                <input
-                  id="redeemCode"
-                  type="text"
-                  data-i18n-placeholder="app.codePlaceholder"
-                  placeholder="例如：RC-XXXXXXXXXXXXXXX"
-                  required
-                />
-              </div>
-              <button type="submit" data-i18n="app.redeemNow">立即兑换</button>
-              <div id="redeemMsg" class="msg"></div>
-            </form>
+            <div class="console-ops-card__body">
+              <form id="redeemForm" class="console-redeem-form">
+                <div class="console-ops-field console-ops-field--grow">
+                  <label for="redeemCode" data-i18n="app.codeLabel">兑换码</label>
+                  <input
+                    id="redeemCode"
+                    type="text"
+                    data-i18n-placeholder="app.codePlaceholder"
+                    placeholder="例如：RC-XXXXXXXXXXXXXXX"
+                    required
+                  />
+                </div>
+                <div class="console-btn-bar console-btn-bar--end">
+                  <button type="submit" class="console-btn" data-i18n="app.redeemNow">立即兑换</button>
+                </div>
+                <div id="redeemMsg" class="msg console-ops-form-msg"></div>
+              </form>
+            </div>
           </section>
-        </div>
 
-        <div class="console-data-grid console-data-grid--token-pricing mb-4">
-          <section class="card console-section console-token-section" id="tokenSection">
-            <div class="console-section-head console-section-head--compact">
+          <section class="card console-ops-card console-section console-token-section" id="tokenSection">
+            <div class="console-section-head console-section-head--compact console-ops-card__head">
               <div class="console-section-copy">
                 <h3 class="mb-0" data-i18n="app.tokenList">令牌列表</h3>
-                <p class="console-section-desc" data-i18n="app.tokenSectionDesc">
+                <p class="console-section-desc console-ops-card__desc" data-i18n="app.tokenSectionDesc">
                   按环境与分组创建子令牌，复制后即可在客户端、脚本或 IDE 中使用。
                 </p>
               </div>
               <div class="console-section-actions">
-                <button type="button" id="openCreateTokenBtn" class="ghost console-add-btn" data-i18n="app.addToken">
+                <button type="button" id="openCreateTokenBtn" class="console-btn console-btn--ghost" data-i18n="app.addToken">
                   添加令牌
                 </button>
               </div>
             </div>
-            <div class="console-token-note" data-i18n="app.tokenSectionHint">
-              请保管好您的令牌，避免泄露给任何人。
-            </div>
-            <div class="table-responsive site-table-scroll console-table-shell">
-              <table class="table">
-                <thead>
-                  <tr>
-                    <th data-i18n="table.name">名称</th>
-                    <th data-i18n="table.group">分组</th>
-                    <th data-i18n="app.tokenPlainColumn">令牌</th>
-                    <th data-i18n="table.status">状态</th>
-                    <th data-i18n="table.lastUsed">最后使用</th>
-                    <th data-i18n="table.action">操作</th>
-                  </tr>
-                </thead>
-                <tbody id="tokenTable"></tbody>
-              </table>
+            <div class="console-ops-card__body">
+              <div class="console-token-note" data-i18n="app.tokenSectionHint">
+                请保管好您的令牌，避免泄露给任何人。
+              </div>
+              <div class="table-responsive site-table-scroll console-table-shell console-ops-table-shell">
+                <table class="table">
+                  <thead>
+                    <tr>
+                      <th data-i18n="table.name">名称</th>
+                      <th data-i18n="table.group">分组</th>
+                      <th data-i18n="app.tokenPlainColumn">令牌</th>
+                      <th data-i18n="table.status">状态</th>
+                      <th data-i18n="table.lastUsed">最后使用</th>
+                      <th data-i18n="table.action">操作</th>
+                    </tr>
+                  </thead>
+                  <tbody id="tokenTable"></tbody>
+                </table>
+              </div>
             </div>
           </section>
 
-          <section class="card console-section console-pricing-section" id="pricingSection">
-            <div class="console-section-head console-section-head--compact">
+          <section class="card console-ops-card console-section console-pricing-section" id="pricingSection">
+            <div class="console-section-head console-section-head--compact console-ops-card__head">
               <div class="console-section-copy">
                 <h3 class="mb-0" data-i18n="app.pricing">模型定价</h3>
-                <p class="console-section-desc" data-i18n="app.pricingDesc">
+                <p class="console-section-desc console-ops-card__desc" data-i18n="app.pricingDesc">
                   复制模型名并核对当前单价；按 token 模型展示输入/输出单价，按次模型展示单次价格。
                 </p>
               </div>
             </div>
-            <div class="table-responsive site-table-scroll console-table-shell">
-              <table class="table">
-                <thead>
-                  <tr>
-                    <th data-i18n="table.model">模型</th>
-                    <th data-i18n="app.pricingColPrice">价格</th>
-                  </tr>
-                </thead>
-                <tbody id="pricingTable"></tbody>
-              </table>
+            <div class="console-ops-card__body">
+              <div class="table-responsive site-table-scroll console-table-shell console-ops-table-shell">
+                <table class="table">
+                  <thead>
+                    <tr>
+                      <th data-i18n="table.model">模型</th>
+                      <th data-i18n="app.pricingColPrice">价格</th>
+                    </tr>
+                  </thead>
+                  <tbody id="pricingTable"></tbody>
+                </table>
+              </div>
             </div>
           </section>
         </div>
@@ -248,19 +242,27 @@
             </div>
           </div>
           <div class="console-form-panel console-form-panel--toolbar">
-            <div class="usage-log-toolbar">
-              <select id="filterStream">
-                <option value="" data-i18n="app.streamAll">流式：全部</option>
-                <option value="true" data-i18n="app.streamTrue">流式</option>
-                <option value="false" data-i18n="app.streamFalse">非流式</option>
-              </select>
-              <input id="filterModel" type="text" data-i18n-placeholder="app.modelPlaceholder" placeholder="筛选模型，如 gpt-4o-mini" />
-              <label class="usage-toolbar-label" for="filterStart" data-i18n="app.filterStart">开始</label>
-              <input id="filterStart" type="datetime-local" data-i18n-title="app.filterStartTitle" title="开始时间" />
-              <label class="usage-toolbar-label" for="filterEnd" data-i18n="app.filterEnd">结束</label>
-              <input id="filterEnd" type="datetime-local" data-i18n-title="app.filterEndTitle" title="结束时间" />
-              <button type="button" id="filterBtn" data-i18n="app.filterLog">筛选日志</button>
-              <button type="button" id="filterResetBtn" class="ghost" data-i18n="app.filterReset">重置</button>
+            <div class="console-toolbar-block">
+              <div class="console-toolbar-fields usage-log-toolbar">
+                <select id="filterStream">
+                  <option value="" data-i18n="app.streamAll">流式：全部</option>
+                  <option value="true" data-i18n="app.streamTrue">流式</option>
+                  <option value="false" data-i18n="app.streamFalse">非流式</option>
+                </select>
+                <input id="filterModel" type="text" data-i18n-placeholder="app.modelPlaceholder" placeholder="筛选模型，如 gpt-4o-mini" />
+                <label class="usage-toolbar-label" for="filterStart" data-i18n="app.filterStart">开始</label>
+                <input id="filterStart" type="datetime-local" data-i18n-title="app.filterStartTitle" title="开始时间" />
+                <label class="usage-toolbar-label" for="filterEnd" data-i18n="app.filterEnd">结束</label>
+                <input id="filterEnd" type="datetime-local" data-i18n-title="app.filterEndTitle" title="结束时间" />
+              </div>
+              <div class="console-btn-bar console-btn-bar--toolbar" aria-label="usage filters">
+                <button type="button" id="filterBtn" class="console-btn" data-i18n="app.filterLog">筛选日志</button>
+                <button type="button" id="filterResetBtn" class="console-btn console-btn--ghost" data-i18n="app.filterReset">重置</button>
+                <span class="console-btn-bar__divider" aria-hidden="true"></span>
+                <button type="button" class="console-btn console-btn--ghost console-btn--compact" id="usageRange1h">1h</button>
+                <button type="button" class="console-btn console-btn--ghost console-btn--compact" id="usageRange24h">24h</button>
+                <button type="button" class="console-btn console-btn--ghost console-btn--compact" id="usageRange7d">7d</button>
+              </div>
             </div>
           </div>
           <div class="table-responsive site-table-scroll console-table-shell">
@@ -272,6 +274,7 @@
                   <th data-i18n="table.token">令牌</th>
                   <th data-i18n="table.group">分组</th>
                   <th data-i18n="table.model">模型</th>
+                  <th>AUTO</th>
                   <th data-i18n="table.reasoningEffort">推理强度</th>
                   <th data-i18n="table.latency">耗时</th>
                   <th data-i18n="table.stream">流式</th>
@@ -290,9 +293,21 @@
           </div>
           <div class="pagination-bar" id="usagePager">
             <span class="pagination-info" id="usagePageInfo"></span>
-            <div class="pagination-actions">
-              <button type="button" id="usagePrevBtn" class="ghost" data-i18n="app.prevPage" disabled>上一页</button>
-              <button type="button" id="usageNextBtn" class="ghost" data-i18n="app.nextPage" disabled>下一页</button>
+            <div class="pagination-actions pagination-actions--with-size">
+              <label class="pagination-label" for="usagePageSize">每页</label>
+              <select id="usagePageSize">
+                <option value="10" selected>10</option>
+                <option value="20">20</option>
+                <option value="50">50</option>
+                <option value="100">100</option>
+              </select>
+              <label class="pagination-label" for="usagePageJump">跳页</label>
+              <input id="usagePageJump" type="number" min="1" step="1" />
+              <button type="button" id="usagePageJumpBtn" class="btn btn-outline-secondary btn-sm">前往</button>
+              <div class="btn-group btn-group-sm pagination-nav-group" role="group" aria-label="usage pagination">
+                <button type="button" id="usagePrevBtn" class="btn btn-outline-secondary" data-i18n="app.prevPage" disabled>上一页</button>
+                <button type="button" id="usageNextBtn" class="btn btn-outline-secondary" data-i18n="app.nextPage" disabled>下一页</button>
+              </div>
             </div>
           </div>
         </section>
@@ -322,14 +337,26 @@
           </div>
           <div class="pagination-bar" id="balancePager">
             <span class="pagination-info" id="balancePageInfo"></span>
-            <div class="pagination-actions">
-              <button type="button" id="balancePrevBtn" class="ghost" data-i18n="app.prevPage" disabled>上一页</button>
-              <button type="button" id="balanceNextBtn" class="ghost" data-i18n="app.nextPage" disabled>下一页</button>
+            <div class="pagination-actions pagination-actions--with-size">
+              <label class="pagination-label" for="balancePageSize">每页</label>
+              <select id="balancePageSize">
+                <option value="10" selected>10</option>
+                <option value="20">20</option>
+                <option value="50">50</option>
+                <option value="100">100</option>
+              </select>
+              <label class="pagination-label" for="balancePageJump">跳页</label>
+              <input id="balancePageJump" type="number" min="1" step="1" />
+              <button type="button" id="balancePageJumpBtn" class="btn btn-outline-secondary btn-sm">前往</button>
+              <div class="btn-group btn-group-sm pagination-nav-group" role="group" aria-label="balance pagination">
+                <button type="button" id="balancePrevBtn" class="btn btn-outline-secondary" data-i18n="app.prevPage" disabled>上一页</button>
+                <button type="button" id="balanceNextBtn" class="btn btn-outline-secondary" data-i18n="app.nextPage" disabled>下一页</button>
+              </div>
             </div>
           </div>
         </section>
 
-        <section class="card console-section mb-4" id="chatTestSection">
+        <section class="card console-section console-ai-lab mb-4" id="chatTestSection">
           <div class="console-section-head">
             <div class="console-section-copy">
               <h3 class="mb-0" data-i18n="app.chatTestTitle">对话测试</h3>
@@ -337,9 +364,10 @@
                 直接使用子令牌测试当前账户可用模型，适合在接入前快速排查。
               </p>
             </div>
+            <span class="console-inline-tip console-ai-lab-tip">AI Lab</span>
           </div>
           <div class="console-chat-layout">
-            <div class="console-chat-panel">
+            <div class="console-chat-panel console-ai-lab-config">
               <div class="console-chat-grid">
                 <div class="console-chat-field">
                   <label for="chatTestTokenSelect" data-i18n="app.chatTestTokenLabel">令牌</label>
@@ -378,14 +406,8 @@
                 </div>
                 <div class="console-chat-field console-chat-field--full">
                   <label for="chatTestModel" data-i18n="app.chatTestModelLabel">模型</label>
-                  <input
-                    id="chatTestModel"
-                    type="text"
-                    list="chatPricingModels"
-                    data-i18n-placeholder="app.chatTestModelPlaceholder"
-                    placeholder="例如：gpt-4o-mini"
-                  />
-                  <datalist id="chatPricingModels"></datalist>
+                  <select id="chatTestModel"></select>
+                  <p id="chatTestModelHealthHint" class="muted console-chat-model-hint"></p>
                 </div>
                 <div id="chatTestGeminiOpts" class="console-chat-field console-chat-field--full" hidden>
                   <div class="console-chat-grid console-chat-grid--inline">
@@ -439,13 +461,36 @@
                   ></textarea>
                 </div>
               </div>
-              <div class="console-chat-actions">
-                <button id="chatTestBtn" type="button" data-i18n="app.chatTestSend">发送测试</button>
+              <div class="console-btn-bar console-ai-lab-quickbar">
+                <button id="chatTestPresetHealth" type="button" class="console-btn console-btn--ghost console-btn--compact">健康检查模板</button>
+                <button id="chatTestPresetSummary" type="button" class="console-btn console-btn--ghost console-btn--compact">结构化总结模板</button>
+                <button id="chatTestPreviewBtn" type="button" class="console-btn console-btn--ghost console-btn--compact">预览请求</button>
+                <button id="chatTestCopyCurlBtn" type="button" class="console-btn console-btn--ghost console-btn--compact">复制 cURL</button>
+                <button id="chatTestClearOutput" type="button" class="console-btn console-btn--ghost console-btn--compact">清空输出</button>
               </div>
+              <div class="console-history-row">
+                <select id="chatTestHistorySelect">
+                  <option value="">最近请求历史（可回填）</option>
+                </select>
+                <div class="console-btn-bar">
+                  <button id="chatTestHistoryApply" type="button" class="console-btn console-btn--ghost console-btn--compact">回填</button>
+                  <button id="chatTestHistoryClear" type="button" class="console-btn console-btn--ghost console-btn--compact">清空历史</button>
+                </div>
+              </div>
+              <pre id="chatTestRequestPreview" class="chat-test-json-pre console-request-preview"></pre>
               <div id="chatTestMsg" class="msg"></div>
             </div>
-            <div class="console-chat-result">
-              <div id="chatTestOutput" class="console-output-panel" aria-live="polite"></div>
+            <div class="console-chat-result console-ai-lab-result">
+              <div class="console-ai-lab-result-head">
+                <div class="console-ai-lab-result-head-main">
+                  <h4 class="console-ai-lab-result-title">实时输出</h4>
+                  <button id="chatTestBtn" type="button" class="console-btn" data-i18n="app.chatTestSend">发送测试</button>
+                </div>
+                <p class="muted console-ai-lab-result-subtitle">支持流式渲染，适合验证响应格式与模型可用性。</p>
+              </div>
+              <div id="chatTestOutput" class="console-output-panel" aria-live="polite">
+                结果将在这里显示。你可以先选令牌与模型，再发送测试请求。
+              </div>
             </div>
           </div>
         </section>

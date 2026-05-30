@@ -9,11 +9,14 @@ if (!getAccessToken()) window.location.href = "/login.html";
 let currentUserGroup = "default";
 let cachedProfile = null;
 let cachedMeTokens = [];
+let cachedPricingModels = [];
+let cachedModelHealth = {};
+const RECENT_CHAT_TEST_CFG_KEY = "traffic_ai_recent_chat_test_cfg_v1";
+const CHAT_TEST_HISTORY_KEY = "traffic_ai_chat_test_history_v1";
 
-const USAGE_PAGE_SIZE = 50;
-const BALANCE_PAGE_SIZE = 50;
-const usageState = { page: 1, total: 0 };
-const balanceState = { page: 1, total: 0 };
+const DEFAULT_PAGE_SIZE = 10;
+const usageState = { page: 1, total: 0, pageSize: DEFAULT_PAGE_SIZE };
+const balanceState = { page: 1, total: 0, pageSize: DEFAULT_PAGE_SIZE };
 
 function renderPager({ infoId, prevId, nextId, state, pageSize }) {
   const info = document.getElementById(infoId);
@@ -90,6 +93,188 @@ function fmtTime(t) {
   return new Date(t).toLocaleString();
 }
 
+function toDatetimeLocalInputValue(date) {
+  const d = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return d.toISOString().slice(0, 16);
+}
+
+function applyUsageQuickRange(hoursBack) {
+  const endEl = document.getElementById("filterEnd");
+  const startEl = document.getElementById("filterStart");
+  if (!startEl || !endEl) return;
+  const end = new Date();
+  const start = new Date(end.getTime() - hoursBack * 60 * 60 * 1000);
+  startEl.value = toDatetimeLocalInputValue(start);
+  endEl.value = toDatetimeLocalInputValue(end);
+}
+
+function ensureChatTestModelOption(value) {
+  const modelEl = document.getElementById("chatTestModel");
+  if (!modelEl || !value) return;
+  if ([...modelEl.options].some((opt) => opt.value === value)) return;
+  if (!cachedPricingModels.some((r) => String(r?.model || "").trim() === value)) {
+    cachedPricingModels.push({ model: value, provider: "openai" });
+  }
+  const opt = document.createElement("option");
+  opt.value = value;
+  opt.textContent = value;
+  modelEl.appendChild(opt);
+}
+
+function inferModelCapabilities(row) {
+  const model = String(row?.model || "").toLowerCase();
+  const provider = String(row?.provider || row?.provider_name || "").toLowerCase();
+  if (provider.includes("anthropic") || model.includes("claude")) return ["anthropic"];
+  if (provider.includes("gemini") || provider.includes("google") || model.includes("gemini")) {
+    if (model.includes("image") || model.includes("imagen")) return ["gemini-image"];
+    return ["gemini-chat"];
+  }
+  return ["openai", "responses"];
+}
+
+function modeToCapability(mode) {
+  if (mode === "anthropic") return "anthropic";
+  if (mode === "gemini-image") return "gemini-image";
+  if (mode === "gemini-chat") return "gemini-chat";
+  if (mode === "responses") return "responses";
+  return "openai";
+}
+
+function renderChatTestModelOptions(preferredValue = "") {
+  const modelSel = document.getElementById("chatTestModel");
+  const modeEl = document.getElementById("chatTestApiMode");
+  if (!modelSel || !modeEl) return;
+  const mode = normalizeChatTestApiMode(modeEl.value);
+  const cap = modeToCapability(mode);
+  const rows = Array.isArray(cachedPricingModels) ? cachedPricingModels : [];
+  const allowed = rows.filter((r) => inferModelCapabilities(r).includes(cap));
+  const names = Array.from(new Set(allowed.map((r) => String(r.model || "").trim()).filter(Boolean)));
+
+  const prev = preferredValue || String(modelSel.value || "").trim();
+  modelSel.innerHTML = "";
+  const ph = document.createElement("option");
+  ph.value = "";
+  ph.textContent = t("app.chatTestModelPlaceholder");
+  modelSel.appendChild(ph);
+  names.forEach((name) => {
+    const opt = document.createElement("option");
+    opt.value = name;
+    const h = cachedModelHealth[name];
+    const s = h ? h.success : 0;
+    const e = h ? h.error : 0;
+    opt.textContent = `${name} [${healthLabelForModel(name)} S${s}/E${e}]`;
+    modelSel.appendChild(opt);
+  });
+  if (prev && names.includes(prev)) {
+    modelSel.value = prev;
+  } else if (names.length > 0) {
+    modelSel.value = names[0];
+  } else {
+    modelSel.value = "";
+  }
+  syncChatTestModelHealthHint();
+}
+
+function saveRecentChatTestConfig(cfg) {
+  try {
+    localStorage.setItem(RECENT_CHAT_TEST_CFG_KEY, JSON.stringify(cfg || {}));
+  } catch {}
+}
+
+function loadRecentChatTestConfig() {
+  try {
+    const raw = localStorage.getItem(RECENT_CHAT_TEST_CFG_KEY);
+    if (!raw) return null;
+    const x = JSON.parse(raw);
+    return x && typeof x === "object" ? x : null;
+  } catch {
+    return null;
+  }
+}
+
+function loadChatTestHistory() {
+  try {
+    const raw = localStorage.getItem(CHAT_TEST_HISTORY_KEY);
+    const arr = raw ? JSON.parse(raw) : [];
+    return Array.isArray(arr) ? arr : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveChatTestHistoryItem(item) {
+  const next = [item, ...loadChatTestHistory()]
+    .filter((x) => x && x.model && x.apiMode)
+    .slice(0, 10);
+  localStorage.setItem(CHAT_TEST_HISTORY_KEY, JSON.stringify(next));
+}
+
+function renderChatTestHistoryOptions() {
+  const sel = document.getElementById("chatTestHistorySelect");
+  if (!sel) return;
+  const history = loadChatTestHistory();
+  sel.innerHTML = "";
+  const ph = document.createElement("option");
+  ph.value = "";
+  ph.textContent = "最近请求历史（可回填）";
+  sel.appendChild(ph);
+  history.forEach((h, idx) => {
+    const opt = document.createElement("option");
+    opt.value = String(idx);
+    const when = h.at ? fmtTime(h.at) : "-";
+    opt.textContent = `${h.apiMode} / ${h.model} / ${when}`;
+    sel.appendChild(opt);
+  });
+}
+
+function healthLabelForModel(modelName) {
+  const h = cachedModelHealth[String(modelName || "")];
+  if (!h) return "未知";
+  if (h.error > 0 && h.success === 0) return "异常";
+  if (h.error > 0) return "告警";
+  if (h.success > 0) return "正常";
+  return "未知";
+}
+
+function modelHealthSummary(modelName) {
+  const name = String(modelName || "");
+  const h = cachedModelHealth[name];
+  if (!h) return "最近200条调用中暂无该模型记录";
+  const lastErr = h.lastErrorAt ? fmtTime(h.lastErrorAt) : "无";
+  return `状态：${healthLabelForModel(name)}，成功 ${h.success} 次，失败 ${h.error} 次，最近失败：${lastErr}`;
+}
+
+function syncChatTestModelHealthHint() {
+  const modelEl = document.getElementById("chatTestModel");
+  const hintEl = document.getElementById("chatTestModelHealthHint");
+  if (!modelEl || !hintEl) return;
+  const model = String(modelEl.value || "").trim();
+  hintEl.textContent = model ? modelHealthSummary(model) : "选择模型后显示健康状态";
+}
+
+function applyRecentChatTestConfig() {
+  const cfg = loadRecentChatTestConfig();
+  if (!cfg) return;
+  const modeEl = document.getElementById("chatTestApiMode");
+  const streamEl = document.getElementById("chatTestStreamMode");
+  const tokenEl = document.getElementById("chatTestTokenSelect");
+  const modelEl = document.getElementById("chatTestModel");
+  const promptEl = document.getElementById("chatTestPrompt");
+
+  if (modeEl && cfg.apiMode) modeEl.value = String(cfg.apiMode);
+  syncChatTestApiModeUi();
+  if (streamEl && cfg.streamMode) streamEl.value = String(cfg.streamMode);
+  if (tokenEl && cfg.tokenId && [...tokenEl.options].some((o) => o.value === String(cfg.tokenId))) {
+    tokenEl.value = String(cfg.tokenId);
+  }
+  if (modelEl && cfg.model) {
+    ensureChatTestModelOption(String(cfg.model));
+    modelEl.value = String(cfg.model);
+  }
+  if (promptEl && cfg.prompt) promptEl.value = String(cfg.prompt);
+  syncChatTestModelHealthHint();
+}
+
 function setText(id, value) {
   const el = document.getElementById(id);
   if (el) el.textContent = value;
@@ -147,17 +332,11 @@ function syncProfileMeta(profile = cachedProfile) {
   setText("heroInviteCode", `${t("common.inviteCode")}: ${profile.inviteCode || profile.invite_code || "-"}`);
 
   const adminLink = document.getElementById("adminLinkBtn");
-  const superAdminLink = document.getElementById("superAdminLinkBtn");
   const role = profile.role || "";
   if (adminLink) {
-    adminLink.style.display = role === "admin" ? "inline-flex" : "none";
+    adminLink.style.display = role === "admin" || role === "super_admin" ? "inline-flex" : "none";
     adminLink.href = adminConsoleHref();
-    adminLink.textContent = t("nav.admin");
-  }
-  if (superAdminLink) {
-    superAdminLink.style.display = role === "super_admin" ? "inline-flex" : "none";
-    superAdminLink.href = adminConsoleHref();
-    superAdminLink.textContent = t("nav.superAdmin");
+    adminLink.textContent = role === "super_admin" ? t("nav.superAdmin") : t("nav.admin");
   }
 }
 
@@ -674,7 +853,7 @@ async function loadUsage(page) {
   const endRaw = document.getElementById("filterEnd")?.value?.trim() || "";
   const params = new URLSearchParams({
     page: String(usageState.page),
-    page_size: String(USAGE_PAGE_SIZE),
+    page_size: String(usageState.pageSize),
   });
   if (stream) params.set("stream", stream);
   if (model) params.set("model", model);
@@ -692,13 +871,13 @@ async function loadUsage(page) {
   disposeBootstrapTooltips(tbody);
   tbody.innerHTML = "";
   if (!rows.length) {
-    renderEmptyTableRow(tbody, 16, t("app.emptyUsage"));
+    renderEmptyTableRow(tbody, 17, t("app.emptyUsage"));
     renderPager({
       infoId: "usagePageInfo",
       prevId: "usagePrevBtn",
       nextId: "usageNextBtn",
       state: usageState,
-      pageSize: USAGE_PAGE_SIZE,
+      pageSize: usageState.pageSize,
     });
     return;
   }
@@ -706,6 +885,9 @@ async function loadUsage(page) {
     const tr = document.createElement("tr");
     const costDisp = r.costUsdApprox ? `$${r.costUsdApprox}` : usdFromMicroStr(r.costMicroUsd);
     const noteText = String(r.note || "-");
+    const autoRoute = r.requestedModel && r.resolvedModel && r.requestedModel !== r.resolvedModel
+      ? `${r.requestedModel} -> ${r.resolvedModel}`
+      : "-";
     const noteTooltipAttrs = r.note
       ? ` data-bs-toggle="tooltip" data-bs-placement="top" data-bs-title="${escapeHtml(String(r.note))}" tabindex="0"`
       : "";
@@ -715,6 +897,7 @@ async function loadUsage(page) {
       <td>${r.tokenName}</td>
       <td>${r.tokenGroup || "-"}</td>
       <td>${r.model}</td>
+      <td>${escapeHtml(autoRoute)}</td>
       <td>${r.reasoningEffort || "-"}</td>
       <td>${r.latencyMs}ms</td>
       <td>${r.stream ? t("app.streamTrue") : t("app.streamFalse")}</td>
@@ -735,7 +918,7 @@ async function loadUsage(page) {
     prevId: "usagePrevBtn",
     nextId: "usageNextBtn",
     state: usageState,
-    pageSize: USAGE_PAGE_SIZE,
+    pageSize: usageState.pageSize,
   });
 }
 
@@ -743,7 +926,7 @@ async function loadBalanceLogs(page) {
   if (typeof page === "number" && page >= 1) balanceState.page = page;
   const params = new URLSearchParams({
     page: String(balanceState.page),
-    page_size: String(BALANCE_PAGE_SIZE),
+    page_size: String(balanceState.pageSize),
   });
   const raw = await api(`/me/balance/logs?${params.toString()}`);
   if (!raw) return;
@@ -758,7 +941,7 @@ async function loadBalanceLogs(page) {
       prevId: "balancePrevBtn",
       nextId: "balanceNextBtn",
       state: balanceState,
-      pageSize: BALANCE_PAGE_SIZE,
+      pageSize: balanceState.pageSize,
     });
     return;
   }
@@ -787,7 +970,7 @@ async function loadBalanceLogs(page) {
     prevId: "balancePrevBtn",
     nextId: "balanceNextBtn",
     state: balanceState,
-    pageSize: BALANCE_PAGE_SIZE,
+    pageSize: balanceState.pageSize,
   });
 }
 
@@ -801,8 +984,8 @@ async function loadPricing() {
   const rows = Array.isArray(raw) ? raw : (raw?.list || []);
   const tbody = document.getElementById("pricingTable");
   tbody.innerHTML = "";
-  const modelsDl = document.getElementById("chatPricingModels");
-  if (modelsDl) modelsDl.innerHTML = "";
+  cachedPricingModels = rows;
+  renderChatTestModelOptions();
   if (!rows.length) {
     renderEmptyTableRow(tbody, 2, t("app.emptyPricing"));
     return;
@@ -852,12 +1035,36 @@ async function loadPricing() {
 
     tbody.appendChild(tr);
 
-    if (modelsDl) {
-      const opt = document.createElement("option");
-      opt.value = r.model;
-      modelsDl.appendChild(opt);
+  });
+}
+
+async function loadModelHealthSnapshot() {
+  let raw;
+  try {
+    raw = await api(`/me/usage-logs?page=1&page_size=200`);
+  } catch {
+    raw = {};
+  }
+  const rows = Array.isArray(raw) ? raw : (raw?.list || []);
+  const next = {};
+  rows.forEach((r) => {
+    const model = String(r?.model || "").trim();
+    if (!model) return;
+    const type = String(r?.type || "").toLowerCase();
+    if (!next[model]) next[model] = { success: 0, error: 0, lastErrorAt: "" };
+    if (type.includes("error") || type.includes("fail")) {
+      next[model].error += 1;
+      const tt = String(r?.time || "");
+      if (tt && (!next[model].lastErrorAt || new Date(tt) > new Date(next[model].lastErrorAt))) {
+        next[model].lastErrorAt = tt;
+      }
+    } else {
+      next[model].success += 1;
     }
   });
+  cachedModelHealth = next;
+  renderChatTestModelOptions();
+  syncChatTestModelHealthHint();
 }
 
 function usdInputToMicroStr(usdNumber) {
@@ -902,10 +1109,10 @@ function syncChatTestApiModeUi() {
     promptPlaceholderKey = "app.chatTestPromptPlaceholderResponses";
   }
 
-  modelEl.setAttribute("data-i18n-placeholder", modelPlaceholderKey);
+  modelEl.title = t(modelPlaceholderKey);
   promptEl.setAttribute("data-i18n-placeholder", promptPlaceholderKey);
-  modelEl.placeholder = t(modelPlaceholderKey);
   promptEl.placeholder = t(promptPlaceholderKey);
+  renderChatTestModelOptions();
 }
 
 function syncGeminiImageFileSummary() {
@@ -970,6 +1177,102 @@ function findFirstGeminiInlineImage(data) {
     }
   }
   return null;
+}
+
+async function buildChatTestRequestContext() {
+  const tokenId = document.getElementById("chatTestTokenSelect").value;
+  const manualEl = document.getElementById("chatTestTokenManual");
+  const manualPlain =
+    manualEl && typeof manualEl.value === "string" ? manualEl.value.trim() : "";
+  const plainToken = manualPlain || loadLocalPlainTokens()[tokenId];
+  const model = document.getElementById("chatTestModel").value.trim();
+  const prompt = document.getElementById("chatTestPrompt").value.trim();
+  const rawApi = document.getElementById("chatTestApiMode").value;
+  const apiMode = normalizeChatTestApiMode(rawApi);
+  const streamModeEl = document.getElementById("chatTestStreamMode");
+  const wantSse =
+    apiMode !== "gemini-image" && streamModeEl && String(streamModeEl.value) === "sse";
+
+  if (!tokenId) throw new Error("请先选择令牌");
+  if (!plainToken) throw new Error(t("app.chatTestNeedPlainOrPaste"));
+  if (!model) throw new Error("请输入要测试的模型");
+  if (apiMode !== "gemini-image" && !prompt) throw new Error("请输入消息内容");
+
+  let path;
+  let payload;
+  if (apiMode === "gemini-image") {
+    const parts = await buildGeminiImagePartsFromUi();
+    if (parts.length === 0) throw new Error(t("app.chatTestGeminiNeedTextOrImage"));
+    const aspect = document.getElementById("chatTestGeminiAspect").value;
+    const imageSize = document.getElementById("chatTestGeminiSize").value;
+    path = `/v1beta/models/${encodeURIComponent(model)}:generateContent`;
+    payload = {
+      contents: [{ role: "user", parts }],
+      generationConfig: {
+        imageConfig: { aspectRatio: aspect, imageSize },
+        responseModalities: ["IMAGE"],
+      },
+    };
+  } else if (apiMode === "gemini-chat") {
+    path = wantSse
+      ? `/v1beta/models/${encodeURIComponent(model)}:streamGenerateContent`
+      : `/v1beta/models/${encodeURIComponent(model)}:generateContent`;
+    payload = {
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+    };
+  } else if (apiMode === "anthropic") {
+    path = "/v1/messages";
+    payload = {
+      model,
+      max_tokens: 1024,
+      messages: [{ role: "user", content: prompt }],
+      stream: wantSse,
+    };
+  } else if (apiMode === "responses") {
+    path = "/v1/responses";
+    payload = {
+      model,
+      input: prompt,
+      stream: wantSse,
+    };
+  } else {
+    path = "/v1/chat/completions";
+    payload = {
+      model,
+      messages: [{ role: "user", content: prompt }],
+      stream: wantSse,
+    };
+  }
+
+  const fetchHeaders =
+    apiMode === "anthropic"
+      ? {
+          "content-type": "application/json",
+          "x-api-key": plainToken,
+          "anthropic-version": "2023-06-01",
+        }
+      : {
+          "content-type": "application/json",
+          authorization: `Bearer ${plainToken}`,
+        };
+
+  return { apiMode, wantSse, path, payload, fetchHeaders };
+}
+
+function redactedHeaders(headers) {
+  const x = { ...headers };
+  if (x.authorization) x.authorization = "Bearer sk-***";
+  if (x["x-api-key"]) x["x-api-key"] = "sk-***";
+  return x;
+}
+
+function buildCurlPreview(path, headers, payload) {
+  const hdrs = redactedHeaders(headers);
+  const headerFlags = Object.entries(hdrs)
+    .map(([k, v]) => `-H ${JSON.stringify(`${k}: ${v}`)}`)
+    .join(" ");
+  const body = JSON.stringify(payload);
+  return `curl -X POST ${JSON.stringify(`${gatewayBase()}${path}`)} ${headerFlags} --data-raw ${JSON.stringify(body)}`;
 }
 
 function geminiResponseJsonForPre(data) {
@@ -1152,6 +1455,18 @@ async function init() {
 
   document.getElementById("refreshBtn").addEventListener("click", () => refreshAll());
   document.getElementById("filterBtn").addEventListener("click", () => loadUsage(1));
+  document.getElementById("usageRange1h")?.addEventListener("click", () => {
+    applyUsageQuickRange(1);
+    loadUsage(1);
+  });
+  document.getElementById("usageRange24h")?.addEventListener("click", () => {
+    applyUsageQuickRange(24);
+    loadUsage(1);
+  });
+  document.getElementById("usageRange7d")?.addEventListener("click", () => {
+    applyUsageQuickRange(24 * 7);
+    loadUsage(1);
+  });
   document.getElementById("filterResetBtn")?.addEventListener("click", () => {
     const streamEl = document.getElementById("filterStream");
     const modelEl = document.getElementById("filterModel");
@@ -1167,16 +1482,50 @@ async function init() {
     if (usageState.page > 1) loadUsage(usageState.page - 1);
   });
   document.getElementById("usageNextBtn")?.addEventListener("click", () => {
-    const pages = usageState.total > 0 ? Math.max(1, Math.ceil(usageState.total / USAGE_PAGE_SIZE)) : 1;
+    const pages = usageState.total > 0 ? Math.max(1, Math.ceil(usageState.total / usageState.pageSize)) : 1;
     if (usageState.page < pages) loadUsage(usageState.page + 1);
+  });
+  document.getElementById("usagePageSize")?.addEventListener("change", () => {
+    const v = Number(document.getElementById("usagePageSize").value);
+    usageState.pageSize = Number.isFinite(v) && v > 0 ? v : DEFAULT_PAGE_SIZE;
+    loadUsage(1);
+  });
+  document.getElementById("usagePageJumpBtn")?.addEventListener("click", () => {
+    const v = Number(document.getElementById("usagePageJump").value);
+    const pages = usageState.total > 0 ? Math.max(1, Math.ceil(usageState.total / usageState.pageSize)) : 1;
+    if (Number.isFinite(v) && v >= 1) loadUsage(Math.min(v, pages));
+  });
+  document.getElementById("usagePageJump")?.addEventListener("keydown", (ev) => {
+    if (ev.key !== "Enter") return;
+    ev.preventDefault();
+    document.getElementById("usagePageJumpBtn")?.click();
   });
   document.getElementById("balancePrevBtn")?.addEventListener("click", () => {
     if (balanceState.page > 1) loadBalanceLogs(balanceState.page - 1);
   });
   document.getElementById("balanceNextBtn")?.addEventListener("click", () => {
-    const pages = balanceState.total > 0 ? Math.max(1, Math.ceil(balanceState.total / BALANCE_PAGE_SIZE)) : 1;
+    const pages = balanceState.total > 0 ? Math.max(1, Math.ceil(balanceState.total / balanceState.pageSize)) : 1;
     if (balanceState.page < pages) loadBalanceLogs(balanceState.page + 1);
   });
+  document.getElementById("balancePageSize")?.addEventListener("change", () => {
+    const v = Number(document.getElementById("balancePageSize").value);
+    balanceState.pageSize = Number.isFinite(v) && v > 0 ? v : DEFAULT_PAGE_SIZE;
+    loadBalanceLogs(1);
+  });
+  document.getElementById("balancePageJumpBtn")?.addEventListener("click", () => {
+    const v = Number(document.getElementById("balancePageJump").value);
+    const pages = balanceState.total > 0 ? Math.max(1, Math.ceil(balanceState.total / balanceState.pageSize)) : 1;
+    if (Number.isFinite(v) && v >= 1) loadBalanceLogs(Math.min(v, pages));
+  });
+  document.getElementById("balancePageJump")?.addEventListener("keydown", (ev) => {
+    if (ev.key !== "Enter") return;
+    ev.preventDefault();
+    document.getElementById("balancePageJumpBtn")?.click();
+  });
+  const usageSizeEl = document.getElementById("usagePageSize");
+  const balanceSizeEl = document.getElementById("balancePageSize");
+  if (usageSizeEl) usageSizeEl.value = String(usageState.pageSize);
+  if (balanceSizeEl) balanceSizeEl.value = String(balanceState.pageSize);
 
   document.getElementById("chatTestApiMode").addEventListener("change", () => {
     syncChatTestApiModeUi();
@@ -1186,55 +1535,146 @@ async function init() {
     syncChatTestApiModeUi();
     window.I18N?.applyI18n?.();
   });
+  document.getElementById("chatTestModel")?.addEventListener("change", () => {
+    syncChatTestModelHealthHint();
+  });
   syncChatTestApiModeUi();
   document.getElementById("chatTestGeminiImages")?.addEventListener("change", () => {
     syncGeminiImageFileSummary();
   });
   syncGeminiImageFileSummary();
+  renderChatTestHistoryOptions();
+  document.getElementById("chatTestPresetHealth")?.addEventListener("click", () => {
+    const modeEl = document.getElementById("chatTestApiMode");
+    const modelEl = document.getElementById("chatTestModel");
+    const promptEl = document.getElementById("chatTestPrompt");
+    if (modeEl && !modeEl.value) modeEl.value = "openai";
+    if (modelEl && !modelEl.value.trim()) {
+      ensureChatTestModelOption("gpt-4o-mini");
+      modelEl.value = "gpt-4o-mini";
+    }
+    if (promptEl) {
+      promptEl.value = "请输出一句健康检查文案，并返回 3 条可观测性检查项。";
+      promptEl.focus();
+    }
+    syncChatTestApiModeUi();
+  });
+  document.getElementById("chatTestPresetSummary")?.addEventListener("click", () => {
+    const modeEl = document.getElementById("chatTestApiMode");
+    const modelEl = document.getElementById("chatTestModel");
+    const promptEl = document.getElementById("chatTestPrompt");
+    if (modeEl && modeEl.value !== "responses") modeEl.value = "responses";
+    if (modelEl && !modelEl.value.trim()) {
+      ensureChatTestModelOption("gpt-4.1-mini");
+      modelEl.value = "gpt-4.1-mini";
+    }
+    if (promptEl) {
+      promptEl.value = "请把以下信息整理成 JSON：目标、风险、下一步。";
+      promptEl.focus();
+    }
+    syncChatTestApiModeUi();
+  });
+  document.getElementById("chatTestClearOutput")?.addEventListener("click", () => {
+    const outEl = document.getElementById("chatTestOutput");
+    const msgEl = document.getElementById("chatTestMsg");
+    const previewEl = document.getElementById("chatTestRequestPreview");
+    outEl?.replaceChildren();
+    if (previewEl) previewEl.textContent = "";
+    if (msgEl) {
+      msgEl.className = "msg";
+      msgEl.textContent = "";
+    }
+  });
+  document.getElementById("chatTestPreviewBtn")?.addEventListener("click", async () => {
+    const msgEl = document.getElementById("chatTestMsg");
+    const previewEl = document.getElementById("chatTestRequestPreview");
+    if (!previewEl || !msgEl) return;
+    try {
+      const req = await buildChatTestRequestContext();
+      previewEl.textContent = JSON.stringify(
+        {
+          path: req.path,
+          headers: redactedHeaders(req.fetchHeaders),
+          payload: req.payload,
+        },
+        null,
+        2,
+      );
+      msgEl.className = "msg ok";
+      msgEl.textContent = "已生成请求预览";
+    } catch (err) {
+      msgEl.className = "msg err";
+      msgEl.textContent = err.message || "生成预览失败";
+    }
+  });
+  document.getElementById("chatTestCopyCurlBtn")?.addEventListener("click", async () => {
+    const msgEl = document.getElementById("chatTestMsg");
+    if (!msgEl) return;
+    try {
+      const req = await buildChatTestRequestContext();
+      await copyToClipboard(buildCurlPreview(req.path, req.fetchHeaders, req.payload));
+      msgEl.className = "msg ok";
+      msgEl.textContent = "cURL 已复制（令牌已脱敏）";
+    } catch (err) {
+      msgEl.className = "msg err";
+      msgEl.textContent = err.message || "复制 cURL 失败";
+    }
+  });
+  document.getElementById("chatTestHistoryApply")?.addEventListener("click", () => {
+    const sel = document.getElementById("chatTestHistorySelect");
+    const modeEl = document.getElementById("chatTestApiMode");
+    const streamEl = document.getElementById("chatTestStreamMode");
+    const tokenEl = document.getElementById("chatTestTokenSelect");
+    const modelEl = document.getElementById("chatTestModel");
+    const promptEl = document.getElementById("chatTestPrompt");
+    const idx = Number(sel?.value || -1);
+    const item = loadChatTestHistory()[idx];
+    if (!item) return;
+    if (modeEl) modeEl.value = item.apiMode || "openai";
+    syncChatTestApiModeUi();
+    if (streamEl) streamEl.value = item.streamMode || "sse";
+    if (tokenEl && item.tokenId && [...tokenEl.options].some((o) => o.value === String(item.tokenId))) {
+      tokenEl.value = String(item.tokenId);
+    }
+    if (modelEl && item.model) {
+      ensureChatTestModelOption(String(item.model));
+      modelEl.value = String(item.model);
+    }
+    if (promptEl) promptEl.value = String(item.prompt || "");
+  });
+  document.getElementById("chatTestHistoryClear")?.addEventListener("click", () => {
+    localStorage.removeItem(CHAT_TEST_HISTORY_KEY);
+    renderChatTestHistoryOptions();
+  });
 
   document.getElementById("chatTestBtn").addEventListener("click", async () => {
     const msgEl = document.getElementById("chatTestMsg");
     const outEl = document.getElementById("chatTestOutput");
+    const previewEl = document.getElementById("chatTestRequestPreview");
     const btn = document.getElementById("chatTestBtn");
-
-    const tokenId = document.getElementById("chatTestTokenSelect").value;
-    const manualEl = document.getElementById("chatTestTokenManual");
-    const manualPlain =
-      manualEl && typeof manualEl.value === "string" ? manualEl.value.trim() : "";
-    const plainToken = manualPlain || loadLocalPlainTokens()[tokenId];
-    const model = document.getElementById("chatTestModel").value.trim();
-    const prompt = document.getElementById("chatTestPrompt").value.trim();
-    const rawApi = document.getElementById("chatTestApiMode").value;
-    const apiMode = normalizeChatTestApiMode(rawApi);
-    const streamModeEl = document.getElementById("chatTestStreamMode");
-    const wantSse =
-      apiMode !== "gemini-image" && streamModeEl && String(streamModeEl.value) === "sse";
-
-    if (!tokenId) {
+    const tokenId = String(document.getElementById("chatTestTokenSelect")?.value || "");
+    const streamMode = String(document.getElementById("chatTestStreamMode")?.value || "sse");
+    let req;
+    try {
+      req = await buildChatTestRequestContext();
+    } catch (err) {
       msgEl.className = "msg err";
-      msgEl.textContent = "请先选择令牌";
+      msgEl.textContent = err.message || "参数检查失败";
       return;
     }
-    if (!plainToken) {
-      msgEl.className = "msg err";
-      msgEl.textContent = t("app.chatTestNeedPlainOrPaste");
-      return;
-    }
-    if (!model) {
-      msgEl.className = "msg err";
-      msgEl.textContent = "请输入要测试的模型";
-      return;
-    }
-    if (apiMode !== "gemini-image" && !prompt) {
-      msgEl.className = "msg err";
-      msgEl.textContent = "请输入消息内容";
-      return;
-    }
+    const { apiMode, wantSse, path, payload, fetchHeaders } = req;
 
     btn.disabled = true;
     outEl.replaceChildren();
     msgEl.className = "msg";
     msgEl.textContent = "发送中...";
+    if (previewEl) {
+      previewEl.textContent = JSON.stringify(
+        { path, headers: redactedHeaders(fetchHeaders), payload },
+        null,
+        2,
+      );
+    }
 
     const timeoutMs =
       apiMode === "gemini-image"
@@ -1244,79 +1684,6 @@ async function init() {
           : 120_000;
     const controller = new AbortController();
     const tmr = setTimeout(() => controller.abort(), timeoutMs);
-
-    let path;
-    let payload;
-    if (apiMode === "gemini-image") {
-      let parts;
-      try {
-        parts = await buildGeminiImagePartsFromUi();
-      } catch (e) {
-        msgEl.className = "msg err";
-        msgEl.textContent = e.message || "读取参考图失败";
-        clearTimeout(tmr);
-        btn.disabled = false;
-        return;
-      }
-      if (parts.length === 0) {
-        msgEl.className = "msg err";
-        msgEl.textContent = t("app.chatTestGeminiNeedTextOrImage");
-        clearTimeout(tmr);
-        btn.disabled = false;
-        return;
-      }
-      const aspect = document.getElementById("chatTestGeminiAspect").value;
-      const imageSize = document.getElementById("chatTestGeminiSize").value;
-      path = `/v1beta/models/${encodeURIComponent(model)}:generateContent`;
-      payload = {
-        contents: [{ role: "user", parts }],
-        generationConfig: {
-          imageConfig: { aspectRatio: aspect, imageSize },
-          responseModalities: ["IMAGE"],
-        },
-      };
-    } else if (apiMode === "gemini-chat") {
-      path = wantSse
-        ? `/v1beta/models/${encodeURIComponent(model)}:streamGenerateContent`
-        : `/v1beta/models/${encodeURIComponent(model)}:generateContent`;
-      payload = {
-        contents: [{ role: "user", parts: [{ text: prompt }] }],
-      };
-    } else if (apiMode === "anthropic") {
-      path = "/v1/messages";
-      payload = {
-        model,
-        max_tokens: 1024,
-        messages: [{ role: "user", content: prompt }],
-        stream: wantSse,
-      };
-    } else if (apiMode === "responses") {
-      path = "/v1/responses";
-      payload = {
-        model,
-        input: prompt,
-        stream: wantSse,
-      };
-    } else {
-      path = "/v1/chat/completions";
-      payload = {
-        model,
-        messages: [{ role: "user", content: prompt }],
-        stream: wantSse,
-      };
-    }
-
-    const fetchHeaders =
-      apiMode === "anthropic"
-        ? {
-            "content-type": "application/json",
-            "x-api-key": plainToken,
-            "anthropic-version": "2023-06-01",
-          }
-        : {
-            "content-type": "application/json",
-            authorization: `Bearer ${plainToken}`,
-          };
 
     async function doFetch(url) {
       return await fetch(url, {
@@ -1366,6 +1733,22 @@ async function init() {
         await pumpChatTestSse(sr, apiMode, pre, controller.signal);
         msgEl.className = "msg ok";
         msgEl.textContent = t("app.chatTestStreamDone");
+        saveRecentChatTestConfig({
+          tokenId,
+          apiMode,
+          streamMode,
+          model: payload?.model || document.getElementById("chatTestModel")?.value || "",
+          prompt: document.getElementById("chatTestPrompt")?.value || "",
+        });
+        saveChatTestHistoryItem({
+          at: new Date().toISOString(),
+          tokenId,
+          apiMode,
+          streamMode,
+          model: payload?.model || document.getElementById("chatTestModel")?.value || "",
+          prompt: document.getElementById("chatTestPrompt")?.value || "",
+        });
+        renderChatTestHistoryOptions();
       } else {
         const rawText = await resp.text().catch(() => "");
         let data = {};
@@ -1379,6 +1762,22 @@ async function init() {
 
         msgEl.className = "msg ok";
         msgEl.textContent = "发送成功";
+        saveRecentChatTestConfig({
+          tokenId,
+          apiMode,
+          streamMode,
+          model: payload?.model || document.getElementById("chatTestModel")?.value || "",
+          prompt: document.getElementById("chatTestPrompt")?.value || "",
+        });
+        saveChatTestHistoryItem({
+          at: new Date().toISOString(),
+          tokenId,
+          apiMode,
+          streamMode,
+          model: payload?.model || document.getElementById("chatTestModel")?.value || "",
+          prompt: document.getElementById("chatTestPrompt")?.value || "",
+        });
+        renderChatTestHistoryOptions();
 
         if (apiMode === "gemini-image") {
           renderChatTestOutputGeminiImage(outEl, data);
@@ -1481,10 +1880,11 @@ async function init() {
   });
 
   await refreshAll();
+  applyRecentChatTestConfig();
 }
 
 async function refreshAll() {
-  await Promise.all([loadProfile(), loadTokens(), loadUsage(), loadBalanceLogs(), loadPricing()]);
+  await Promise.all([loadProfile(), loadTokens(), loadUsage(), loadBalanceLogs(), loadPricing(), loadModelHealthSnapshot()]);
 }
 
 init().catch(async (e) => {

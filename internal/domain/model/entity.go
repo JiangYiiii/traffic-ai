@@ -10,23 +10,27 @@ const (
 )
 
 type Model struct {
-	ID                int64
-	ModelName         string
-	Provider          string // 向后兼容的聚合展示字段，真实 provider 存在其 model_accounts 上
-	ModelType         string
-	BillingType       BillingType
-	InputPrice        int64
-	OutputPrice       int64
-	ReasoningPrice    int64
-	PerRequestPrice   int64
-	IsActive          bool
-	IsListed          bool // 是否上架展示给用户
-	LastTestPassed    *bool
-	LastTestAt        *time.Time
-	LastTestLatencyMs *int
-	LastTestError     string
-	CreatedAt         time.Time
-	UpdatedAt         time.Time
+	ID                  int64
+	ModelName           string
+	Provider            string // 向后兼容的聚合展示字段，真实 provider 存在其 model_accounts 上
+	ModelType           string
+	BillingType         BillingType
+	InputPrice          int64
+	OutputPrice         int64
+	ReasoningPrice      int64
+	PerRequestPrice     int64
+	IsActive            bool
+	IsListed            bool // 是否上架展示给用户
+	IsVirtual           bool
+	VirtualType         string
+	ContextWindowTokens int
+	CapabilityTags      []string
+	LastTestPassed      *bool
+	LastTestAt          *time.Time
+	LastTestLatencyMs   *int
+	LastTestError       string
+	CreatedAt           time.Time
+	UpdatedAt           time.Time
 }
 
 // ModelAccount 一个模型下的账号：代表一条"怎么去第三方调这个模型"的完整配置。

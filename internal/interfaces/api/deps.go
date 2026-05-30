@@ -30,14 +30,15 @@ type controlPlane struct {
 
 	jwtMgr *jwt.Manager
 
-	authHandler    *handler.AuthHandler
-	tokenHandler   *handler.TokenHandler
-	billingHandler *handler.BillingHandler
-	modelHandler   *handler.ModelHandler
-	rlHandler      *handler.RateLimitHandler
-	accountHandler *handler.AccountHandler
-	oauthHandler   *handler.OAuthHandler
-	monitorHandler *handler.MonitorHandler
+	authHandler      *handler.AuthHandler
+	tokenHandler     *handler.TokenHandler
+	billingHandler   *handler.BillingHandler
+	modelHandler     *handler.ModelHandler
+	autoRouteHandler *handler.AutoRouteHandler
+	rlHandler        *handler.RateLimitHandler
+	accountHandler   *handler.AccountHandler
+	oauthHandler     *handler.OAuthHandler
+	monitorHandler   *handler.MonitorHandler
 }
 
 func newControlPlane(cfg *config.Config, db *sql.DB, rdb *redis.Client) *controlPlane {
@@ -55,6 +56,7 @@ func newControlPlane(cfg *config.Config, db *sql.DB, rdb *redis.Client) *control
 	redeemRepo := mysql.NewRedeemCodeRepo(db)
 	modelRepo := mysql.NewModelRepo(db)
 	modelAccountRepo := mysql.NewModelAccountRepo(db)
+	autoRouteRepo := mysql.NewAutoRouteRepo(db)
 	tokenGroupRepo := mysql.NewTokenGroupRepo(db)
 	rlRuleRepo := mysql.NewRateLimitRuleRepo(db)
 	usageLogRepo := mysql.NewUsageLogRepo(db)
@@ -72,7 +74,7 @@ func newControlPlane(cfg *config.Config, db *sql.DB, rdb *redis.Client) *control
 	tokenUC := apptoken.NewUseCase(tokenRepo)
 	modelUC := appmodel.NewUseCase(modelRepo, modelAccountRepo, aesKey)
 	// control 面不参与数据面熔断决策，传 nil 即可（选号走全量候选）。
-	routingUC := approuting.NewUseCase(tokenGroupRepo, modelRepo, modelAccountRepo, aesKey, cfg.OAuth, nil)
+	routingUC := approuting.NewUseCase(tokenGroupRepo, modelRepo, modelAccountRepo, aesKey, cfg.OAuth, nil, autoRouteRepo)
 
 	oauthUC := appoauth.NewUseCase(cfg.OAuth, oauthStateRepo, aesKey)
 	monitorUC := appmonitor.NewUseCase(monitorRepo, modelRepo, modelAccountRepo, monitorCounter)
@@ -88,14 +90,15 @@ func newControlPlane(cfg *config.Config, db *sql.DB, rdb *redis.Client) *control
 
 		jwtMgr: jwtMgr,
 
-		authHandler:    handler.NewAuthHandler(authUC),
-		tokenHandler:   handler.NewTokenHandler(tokenUC),
-		billingHandler: handler.NewBillingHandler(billingUC, userRepo),
-		modelHandler:   handler.NewModelHandler(modelUC, routingUC, usageLogRepo),
-		rlHandler:      handler.NewRateLimitHandler(rlUC),
-		accountHandler: handler.NewAccountHandler(userRepo, balanceRepo, tokenRepo, usageLogRepo),
-		oauthHandler:   handler.NewOAuthHandler(oauthUC),
-		monitorHandler: handler.NewMonitorHandler(monitorUC),
+		authHandler:      handler.NewAuthHandler(authUC),
+		tokenHandler:     handler.NewTokenHandler(tokenUC),
+		billingHandler:   handler.NewBillingHandler(billingUC, userRepo),
+		modelHandler:     handler.NewModelHandler(modelUC, routingUC, usageLogRepo),
+		autoRouteHandler: handler.NewAutoRouteHandler(routingUC),
+		rlHandler:        handler.NewRateLimitHandler(rlUC),
+		accountHandler:   handler.NewAccountHandler(userRepo, balanceRepo, tokenRepo, usageLogRepo),
+		oauthHandler:     handler.NewOAuthHandler(oauthUC),
+		monitorHandler:   handler.NewMonitorHandler(monitorUC),
 	}
 }
 
@@ -131,6 +134,7 @@ func (p *controlPlane) registerAdminAPI(r *gin.Engine) {
 	modelMgmtGroup.Use(middleware.JWTAuth(p.jwtMgr))
 	modelMgmtGroup.Use(middleware.RequireSuperAdmin())
 	p.modelHandler.Register(modelMgmtGroup)
+	p.autoRouteHandler.Register(modelMgmtGroup)
 	p.rlHandler.Register(modelMgmtGroup)
 	p.oauthHandler.RegisterStart(modelMgmtGroup)
 	p.monitorHandler.Register(modelMgmtGroup)

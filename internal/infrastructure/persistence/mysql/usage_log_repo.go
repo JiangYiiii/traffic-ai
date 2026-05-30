@@ -3,6 +3,7 @@ package mysql
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -21,13 +22,19 @@ type UsageLogFilter struct {
 
 // UsageLog 对应 usage_logs 表的行结构。
 type UsageLog struct {
-	ID             int64
-	RequestID      string
-	UserID         int64
-	APIKeyID       int64
-	Model          string
-	ModelAccountID int64 // usage_logs.model_account_id，指向 model_accounts.id
-	Protocol       string
+	ID                  int64
+	RequestID           string
+	UserID              int64
+	APIKeyID            int64
+	Model               string
+	RequestedModel      string
+	ResolvedModel       string
+	ModelAccountID      int64 // usage_logs.model_account_id，指向 model_accounts.id
+	AutoRoutePolicyID   int64
+	RouteMode           string
+	RouteReason         string
+	RouteScore          int
+	Protocol            string
 	IsStream            bool
 	Status              string
 	ErrorMessage        string
@@ -60,19 +67,37 @@ func NewUsageLogRepo(db *sql.DB) *UsageLogRepo {
 
 func (r *UsageLogRepo) Create(ctx context.Context, log *UsageLog) error {
 	const q = `INSERT INTO usage_logs
-		(request_id, user_id, api_key_id, model, model_account_id, protocol,
+		(request_id, user_id, api_key_id, model, requested_model, resolved_model,
+		 model_account_id, auto_route_policy_id, route_mode, route_reason, route_score, protocol,
 		 is_stream, status, error_message,
 		 input_tokens, output_tokens, reasoning_tokens,
 		 cache_creation_tokens, cache_read_tokens, reasoning_effort,
 		 total_tokens,
 		 cost_micro_usd, latency_ms, client_ip, note, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 	isStream := 0
 	if log.IsStream {
 		isStream = 1
 	}
+	requestedModel := log.RequestedModel
+	if requestedModel == "" {
+		requestedModel = log.Model
+	}
+	resolvedModel := log.ResolvedModel
+	if resolvedModel == "" {
+		resolvedModel = log.Model
+	}
+	var routeReason any
+	if strings.TrimSpace(log.RouteReason) != "" {
+		b, err := json.Marshal(map[string]string{"summary": log.RouteReason})
+		if err != nil {
+			return err
+		}
+		routeReason = string(b)
+	}
 	res, err := r.db.ExecContext(ctx, q,
-		log.RequestID, log.UserID, log.APIKeyID, log.Model, log.ModelAccountID, log.Protocol,
+		log.RequestID, log.UserID, log.APIKeyID, log.Model, requestedModel, resolvedModel,
+		log.ModelAccountID, log.AutoRoutePolicyID, log.RouteMode, routeReason, log.RouteScore, log.Protocol,
 		isStream, log.Status, log.ErrorMessage,
 		log.InputTokens, log.OutputTokens, log.ReasoningTokens,
 		log.CacheCreationTokens, log.CacheReadTokens, log.ReasoningEffort,
@@ -138,6 +163,7 @@ func (r *UsageLogRepo) ListPaged(ctx context.Context, filter *UsageLogFilter, pa
 	offset := (page - 1) * pageSize
 	dataQ := fmt.Sprintf(
 		`SELECT id, request_id, user_id, api_key_id, model, model_account_id, protocol,
+		        requested_model, resolved_model, auto_route_policy_id, route_mode, route_reason, route_score,
 		        is_stream, status, error_message,
 		        input_tokens, output_tokens, reasoning_tokens,
 		        cache_creation_tokens, cache_read_tokens, reasoning_effort,
@@ -156,8 +182,10 @@ func (r *UsageLogRepo) ListPaged(ctx context.Context, filter *UsageLogFilter, pa
 	for rows.Next() {
 		l := &UsageLog{}
 		var isStream int
+		var routeReason sql.NullString
 		if err := rows.Scan(
 			&l.ID, &l.RequestID, &l.UserID, &l.APIKeyID, &l.Model, &l.ModelAccountID, &l.Protocol,
+			&l.RequestedModel, &l.ResolvedModel, &l.AutoRoutePolicyID, &l.RouteMode, &routeReason, &l.RouteScore,
 			&isStream, &l.Status, &l.ErrorMessage,
 			&l.InputTokens, &l.OutputTokens, &l.ReasoningTokens,
 			&l.CacheCreationTokens, &l.CacheReadTokens, &l.ReasoningEffort,
@@ -167,6 +195,9 @@ func (r *UsageLogRepo) ListPaged(ctx context.Context, filter *UsageLogFilter, pa
 			return nil, 0, err
 		}
 		l.IsStream = isStream == 1
+		if routeReason.Valid {
+			l.RouteReason = routeReason.String
+		}
 		list = append(list, l)
 	}
 	return list, total, rows.Err()
@@ -221,6 +252,7 @@ func (r *UsageLogRepo) ListPagedWithToken(ctx context.Context, filter *UsageLogF
 	offset := (page - 1) * pageSize
 	dataQ := fmt.Sprintf(
 		`SELECT ul.id, ul.request_id, ul.user_id, ul.api_key_id, ul.model, ul.model_account_id, ul.protocol,
+		        ul.requested_model, ul.resolved_model, ul.auto_route_policy_id, ul.route_mode, ul.route_reason, ul.route_score,
 		        ul.is_stream, ul.status, ul.error_message,
 		        ul.input_tokens, ul.output_tokens, ul.reasoning_tokens,
 		        ul.cache_creation_tokens, ul.cache_read_tokens, ul.reasoning_effort,
@@ -244,8 +276,10 @@ func (r *UsageLogRepo) ListPagedWithToken(ctx context.Context, filter *UsageLogF
 	for rows.Next() {
 		l := &UsageLog{}
 		var isStream int
+		var routeReason sql.NullString
 		if err := rows.Scan(
 			&l.ID, &l.RequestID, &l.UserID, &l.APIKeyID, &l.Model, &l.ModelAccountID, &l.Protocol,
+			&l.RequestedModel, &l.ResolvedModel, &l.AutoRoutePolicyID, &l.RouteMode, &routeReason, &l.RouteScore,
 			&isStream, &l.Status, &l.ErrorMessage,
 			&l.InputTokens, &l.OutputTokens, &l.ReasoningTokens,
 			&l.CacheCreationTokens, &l.CacheReadTokens, &l.ReasoningEffort,
@@ -256,6 +290,9 @@ func (r *UsageLogRepo) ListPagedWithToken(ctx context.Context, filter *UsageLogF
 			return nil, 0, err
 		}
 		l.IsStream = isStream == 1
+		if routeReason.Valid {
+			l.RouteReason = routeReason.String
+		}
 		list = append(list, l)
 	}
 	return list, total, rows.Err()

@@ -2,6 +2,7 @@ package routing
 
 import (
 	"context"
+	"encoding/json"
 	"math/rand"
 	"strings"
 	"time"
@@ -23,6 +24,7 @@ type UseCase struct {
 	aesKey      []byte
 	oauthCfg    config.OAuthConfig
 	breaker     domainRouting.CircuitBreaker // nil 表示未启用熔断，选号时不过滤
+	autoRepo    domainRouting.AutoRouteRepository
 }
 
 func NewUseCase(
@@ -32,7 +34,12 @@ func NewUseCase(
 	aesKey []byte,
 	oauthCfg config.OAuthConfig,
 	breaker domainRouting.CircuitBreaker,
+	autoRepos ...domainRouting.AutoRouteRepository,
 ) *UseCase {
+	var autoRepo domainRouting.AutoRouteRepository
+	if len(autoRepos) > 0 {
+		autoRepo = autoRepos[0]
+	}
 	return &UseCase{
 		tgRepo:      tgRepo,
 		modelRepo:   modelRepo,
@@ -40,6 +47,7 @@ func NewUseCase(
 		aesKey:      aesKey,
 		oauthCfg:    oauthCfg,
 		breaker:     breaker,
+		autoRepo:    autoRepo,
 	}
 }
 
@@ -122,16 +130,48 @@ func (uc *UseCase) ListModelAccountIDsForGroup(ctx context.Context, tokenGroupID
 
 // ---- RoutingService implementation ----
 
+// SelectRoute chooses a concrete model account for either a real model or a virtual AUTO model.
+func (uc *UseCase) SelectRoute(ctx context.Context, req domainRouting.RouteRequest) (*domainRouting.RouteResult, error) {
+	modelName := strings.TrimSpace(req.RequestedModel)
+	if modelName == "" {
+		return nil, errcode.ErrModelNotFound
+	}
+	m, err := uc.modelRepo.FindByName(ctx, modelName)
+	if err != nil {
+		logger.L.Errorw("routing: find requested model failed", "error", err, "model", modelName)
+		return nil, errcode.ErrInternal
+	}
+	if m == nil || !m.IsActive {
+		return nil, errcode.ErrModelNotFound
+	}
+	if !m.IsVirtual {
+		return uc.selectModelAccountCore(ctx, req.TokenGroup, modelName, req.Protocol, req.ExcludeAccountIDs)
+	}
+	if m.VirtualType != domainRouting.VirtualTypeAutoRoute || uc.autoRepo == nil {
+		return nil, errcode.ErrNoAvailableRoute
+	}
+	return uc.selectAutoRoute(ctx, req, m)
+}
+
 // SelectModelAccount picks one model account by weighted random from candidates
 // matching tokenGroup + modelName + protocol.
 func (uc *UseCase) SelectModelAccount(ctx context.Context, tokenGroup, modelName, protocol string) (*domainRouting.RouteResult, error) {
-	return uc.selectModelAccountCore(ctx, tokenGroup, modelName, protocol, nil)
+	return uc.SelectRoute(ctx, domainRouting.RouteRequest{
+		TokenGroup:     tokenGroup,
+		RequestedModel: modelName,
+		Protocol:       protocol,
+	})
 }
 
 // SelectModelAccountExcluding 同 SelectModelAccount，但会跳过给定的 excludeIDs。
 // 卡 #3b 的 fallback 循环会使用本方法：前一个账号失败后排除它重新选号。
 func (uc *UseCase) SelectModelAccountExcluding(ctx context.Context, tokenGroup, modelName, protocol string, excludeIDs []int64) (*domainRouting.RouteResult, error) {
-	return uc.selectModelAccountCore(ctx, tokenGroup, modelName, protocol, excludeIDs)
+	return uc.SelectRoute(ctx, domainRouting.RouteRequest{
+		TokenGroup:        tokenGroup,
+		RequestedModel:    modelName,
+		Protocol:          protocol,
+		ExcludeAccountIDs: excludeIDs,
+	})
 }
 
 // SelectOpenAICompatibleAccount 见 domainRouting.RoutingService。
@@ -193,7 +233,134 @@ func (uc *UseCase) SelectOpenAICompatibleAccount(ctx context.Context, tokenGroup
 	if err := uc.materializeAccountCredentials(ctx, chosen, m); err != nil {
 		return nil, err
 	}
-	return &domainRouting.RouteResult{Account: chosen, Model: m}, nil
+	return &domainRouting.RouteResult{
+		Account:        chosen,
+		Model:          m,
+		RequestedModel: m.ModelName,
+		ResolvedModel:  m.ModelName,
+	}, nil
+}
+
+type autoRules struct {
+	RequireCapabilities []string `json:"require_capabilities"`
+	AllowQualityUpgrade bool     `json:"allow_quality_upgrade"`
+}
+
+func (uc *UseCase) selectAutoRoute(ctx context.Context, req domainRouting.RouteRequest, virtualModel *domainModel.Model) (*domainRouting.RouteResult, error) {
+	policy, err := uc.autoRepo.FindActivePolicyByVirtualModelID(ctx, virtualModel.ID)
+	if err != nil {
+		logger.L.Errorw("routing: find auto policy failed", "error", err, "virtualModelID", virtualModel.ID)
+		return nil, errcode.ErrInternal
+	}
+	if policy == nil {
+		return nil, errcode.ErrNoAvailableRoute
+	}
+	candidates, err := uc.autoRepo.ListCandidatesByPolicyID(ctx, policy.ID, true)
+	if err != nil {
+		logger.L.Errorw("routing: list auto candidates failed", "error", err, "policyID", policy.ID)
+		return nil, errcode.ErrInternal
+	}
+	if len(candidates) == 0 {
+		return nil, errcode.ErrNoAvailableRoute
+	}
+
+	rules := parseAutoRules(policy.RulesJSON)
+	accountIDs, err := uc.tgRepo.ListModelAccountIDsByName(ctx, req.TokenGroup)
+	if err != nil {
+		logger.L.Errorw("routing: list model account ids failed", "error", err, "group", req.TokenGroup)
+		return nil, errcode.ErrInternal
+	}
+	idSet := make(map[int64]struct{}, len(accountIDs))
+	for _, id := range accountIDs {
+		idSet[id] = struct{}{}
+	}
+	excludeAccountSet := int64Set(req.ExcludeAccountIDs)
+	excludeModelSet := int64Set(req.ExcludeModelIDs)
+
+	type scoredRoute struct {
+		model   *domainModel.Model
+		account *domainModel.ModelAccount
+		score   int
+		reason  string
+	}
+	var scored []scoredRoute
+	for _, c := range candidates {
+		if _, excluded := excludeModelSet[c.TargetModelID]; excluded {
+			continue
+		}
+		if req.EstimatedTokens > 0 && c.MinRequestContextTokens > 0 && req.EstimatedTokens < c.MinRequestContextTokens {
+			continue
+		}
+		m, err := uc.modelRepo.FindByID(ctx, c.TargetModelID)
+		if err != nil {
+			logger.L.Errorw("routing: find auto candidate model failed", "error", err, "modelID", c.TargetModelID)
+			return nil, errcode.ErrInternal
+		}
+		if m == nil || !m.IsActive || !m.IsListed || m.IsVirtual {
+			continue
+		}
+		if m.ContextWindowTokens > 0 && req.EstimatedTokens > m.ContextWindowTokens {
+			continue
+		}
+		if !hasCapabilities(m.CapabilityTags, rules.RequireCapabilities) {
+			continue
+		}
+		accounts, err := uc.accountRepo.ListActiveByModelIDs(ctx, []int64{m.ID})
+		if err != nil {
+			logger.L.Errorw("routing: list auto candidate accounts failed", "error", err, "modelID", m.ID)
+			return nil, errcode.ErrInternal
+		}
+		for _, a := range accounts {
+			if _, ok := idSet[a.ID]; !ok {
+				continue
+			}
+			if _, excluded := excludeAccountSet[a.ID]; excluded {
+				continue
+			}
+			if req.Protocol != "" && !routingProtocolMatches(req.Protocol, a.Protocol) {
+				continue
+			}
+			if uc.breaker != nil {
+				allowed, bErr := uc.breaker.Allow(ctx, a.ID)
+				if bErr != nil {
+					logger.L.Warnw("routing: circuit breaker Allow failed, allowing conservatively",
+						"modelAccountID", a.ID, "error", bErr)
+				} else if !allowed {
+					continue
+				}
+			}
+			score := autoCandidateScore(policy.Strategy, c, m, req)
+			scored = append(scored, scoredRoute{
+				model:   m,
+				account: a,
+				score:   score,
+				reason:  "strategy=" + policy.Strategy + "; selected=" + m.ModelName,
+			})
+		}
+	}
+	if len(scored) == 0 {
+		return nil, errcode.ErrNoAvailableRoute
+	}
+	best := scored[0]
+	for _, sr := range scored[1:] {
+		if sr.score > best.score {
+			best = sr
+		}
+	}
+	if err := uc.materializeAccountCredentials(ctx, best.account, best.model); err != nil {
+		return nil, err
+	}
+	return &domainRouting.RouteResult{
+		Account:        best.account,
+		Model:          best.model,
+		RequestedModel: virtualModel.ModelName,
+		ResolvedModel:  best.model.ModelName,
+		IsAutoRoute:    true,
+		PolicyID:       policy.ID,
+		Mode:           policy.Strategy,
+		Score:          best.score,
+		Reason:         best.reason,
+	}, nil
 }
 
 // materializeAccountCredentials 解密 credential，并在 OAuth 将过期时刷新 access_token。
@@ -314,7 +481,68 @@ func (uc *UseCase) selectModelAccountCore(
 		return nil, err
 	}
 
-	return &domainRouting.RouteResult{Account: chosen, Model: m}, nil
+	return &domainRouting.RouteResult{
+		Account:        chosen,
+		Model:          m,
+		RequestedModel: modelName,
+		ResolvedModel:  m.ModelName,
+	}, nil
+}
+
+func parseAutoRules(raw string) autoRules {
+	var rules autoRules
+	if strings.TrimSpace(raw) == "" {
+		return rules
+	}
+	if err := json.Unmarshal([]byte(raw), &rules); err != nil {
+		logger.L.Warnw("routing: parse auto rules failed", "error", err)
+	}
+	return rules
+}
+
+func int64Set(ids []int64) map[int64]struct{} {
+	out := make(map[int64]struct{}, len(ids))
+	for _, id := range ids {
+		out[id] = struct{}{}
+	}
+	return out
+}
+
+func hasCapabilities(modelTags, required []string) bool {
+	if len(required) == 0 {
+		return true
+	}
+	tags := make(map[string]struct{}, len(modelTags))
+	for _, tag := range modelTags {
+		tags[strings.ToLower(strings.TrimSpace(tag))] = struct{}{}
+	}
+	for _, req := range required {
+		if _, ok := tags[strings.ToLower(strings.TrimSpace(req))]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
+func autoCandidateScore(strategy string, c *domainRouting.AutoRouteCandidate, m *domainModel.Model, req domainRouting.RouteRequest) int {
+	score := c.QualityScore + c.Weight + c.LatencyBias - c.CostBias
+	switch strategy {
+	case domainRouting.AutoStrategyCheap:
+		score -= int((m.InputPrice + m.OutputPrice) / 100)
+	case domainRouting.AutoStrategyFast:
+		score += c.LatencyBias * 2
+	case domainRouting.AutoStrategyQuality:
+		score += c.QualityScore
+	case domainRouting.AutoStrategyCoding:
+		if req.RequestFeatures.HasCode || hasCapabilities(m.CapabilityTags, []string{"coding"}) {
+			score += 40
+		}
+	case domainRouting.AutoStrategyReasoning:
+		if req.RequestFeatures.WantsReasoning || hasCapabilities(m.CapabilityTags, []string{"reasoning"}) {
+			score += 40
+		}
+	}
+	return score
 }
 
 // ListAvailableModels returns distinct active models accessible from a tokenGroup.
@@ -336,11 +564,19 @@ func (uc *UseCase) ListAvailableModels(ctx context.Context, tokenGroup string) (
 
 	modelIDSet := make(map[int64]*domainModel.Model, len(allModels))
 	var activeModelIDs []int64
+	var virtualModels []*domainModel.Model
 	for _, m := range allModels {
-		if m.IsActive && m.IsListed {
-			modelIDSet[m.ID] = m
-			activeModelIDs = append(activeModelIDs, m.ID)
+		if !m.IsActive || !m.IsListed {
+			continue
 		}
+		if m.IsVirtual {
+			if m.VirtualType == domainRouting.VirtualTypeAutoRoute {
+				virtualModels = append(virtualModels, m)
+			}
+			continue
+		}
+		modelIDSet[m.ID] = m
+		activeModelIDs = append(activeModelIDs, m.ID)
 	}
 
 	accounts, err := uc.accountRepo.ListActiveByModelIDs(ctx, activeModelIDs)
@@ -367,7 +603,34 @@ func (uc *UseCase) ListAvailableModels(ctx context.Context, tokenGroup string) (
 			result = append(result, m)
 		}
 	}
+	if uc.autoRepo != nil {
+		for _, vm := range virtualModels {
+			if uc.virtualModelReachable(ctx, vm, reachableModelIDs, modelIDSet) {
+				result = append(result, vm)
+			}
+		}
+	}
 	return result, nil
+}
+
+func (uc *UseCase) virtualModelReachable(ctx context.Context, vm *domainModel.Model, reachableModelIDs map[int64]struct{}, realModelSet map[int64]*domainModel.Model) bool {
+	policy, err := uc.autoRepo.FindActivePolicyByVirtualModelID(ctx, vm.ID)
+	if err != nil || policy == nil {
+		return false
+	}
+	candidates, err := uc.autoRepo.ListCandidatesByPolicyID(ctx, policy.ID, true)
+	if err != nil {
+		return false
+	}
+	for _, c := range candidates {
+		if _, ok := reachableModelIDs[c.TargetModelID]; !ok {
+			continue
+		}
+		if m, ok := realModelSet[c.TargetModelID]; ok && m != nil && !m.IsVirtual {
+			return true
+		}
+	}
+	return false
 }
 
 func (uc *UseCase) persistRefreshedToken(modelAccountID int64, newAccess, newRefresh string, expiresIn int) {

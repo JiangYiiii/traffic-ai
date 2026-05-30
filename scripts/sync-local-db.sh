@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# 本地 MySQL 对齐当前仓库 schema：先保证库与基表存在，再执行幂等补丁（000002～000005 等价逻辑）
+# 本地 MySQL 快速对齐（legacy）：基表 + ensure_traffic_ai_schema.sql 幂等补丁。
+# 生产/预发请使用: ./scripts/deploy-init-db.sh 或 make deploy-init-db
 # 用法: ./scripts/sync-local-db.sh
 set -euo pipefail
 PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"

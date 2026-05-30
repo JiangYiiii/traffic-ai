@@ -8,12 +8,20 @@ import (
 
 // RouteResult 路由结果：一条选中的模型账号 + 模型。
 type RouteResult struct {
-	Account *model.ModelAccount
-	Model   *model.Model
+	Account        *model.ModelAccount
+	Model          *model.Model
+	RequestedModel string
+	ResolvedModel  string
+	IsAutoRoute    bool
+	PolicyID       int64
+	Mode           string
+	Score          int
+	Reason         string
 }
 
 // RoutingService selects an available model account for a given request context.
 type RoutingService interface {
+	SelectRoute(ctx context.Context, req RouteRequest) (*RouteResult, error)
 	// SelectModelAccount picks one active model account by tokenGroup + modelName + protocol, weighted random.
 	SelectModelAccount(ctx context.Context, tokenGroup, modelName, protocol string) (*RouteResult, error)
 	// SelectModelAccountExcluding 同 SelectModelAccount，但会跳过给定的 excludeIDs。

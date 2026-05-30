@@ -92,7 +92,7 @@
                   <button type="button" class="btn btn-primary btn-sm" id="btnModelAdd" data-i18n="admin.models.add">添加模型</button>
                 </div>
               </div>
-              <div class="row g-2 align-items-end mb-3">
+              <div class="row g-2 align-items-end mb-3 console-toolbar">
                 <div class="col-md-3">
                   <label class="form-label small mb-0" for="modelFilterProvider" data-i18n="admin.models.filterProvider">提供商</label>
                   <select id="modelFilterProvider" class="form-select form-select-sm">
@@ -209,7 +209,53 @@
             </div>
           </section>
 
-          <!-- D. 限流 -->
+          <!-- D. AUTO 自动路由 -->
+          <section class="card mb-4" id="autoRouteSection">
+            <div class="card-body">
+              <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+                <h2 class="h5 mb-0">AUTO 自动路由</h2>
+                <span class="small text-muted">按最终路由到的真实模型计费</span>
+              </div>
+              <div class="row g-2 mb-3 console-toolbar align-items-end">
+                <div class="col-md-3">
+                  <label class="form-label small mb-1" for="autoVirtualModelName" data-i18n="admin.autoRoute.modelName">模型名</label>
+                  <input id="autoVirtualModelName" class="form-control form-control-sm" placeholder="auto" data-i18n-placeholder="admin.autoRoute.modelNamePh" />
+                </div>
+                <div class="col-md-2">
+                  <label class="form-label small mb-1" for="autoRouteStrategy" data-i18n="admin.autoRoute.strategy">策略</label>
+                  <select id="autoRouteStrategy" class="form-select form-select-sm">
+                    <option value="balanced">balanced</option>
+                    <option value="fast">fast</option>
+                    <option value="cheap">cheap</option>
+                    <option value="quality">quality</option>
+                    <option value="coding">coding</option>
+                    <option value="reasoning">reasoning</option>
+                  </select>
+                </div>
+                <div class="col-md-5">
+                  <label class="form-label small mb-1" for="autoRouteCandidates" data-i18n="admin.autoRoute.candidates">候选模型</label>
+                  <select id="autoRouteCandidates" class="form-select form-select-sm" multiple size="3"></select>
+                  <div class="form-text" data-i18n="admin.autoRoute.candidatesHint">按住 Ctrl / Command 多选</div>
+                </div>
+                <div class="col-md-2">
+                  <button type="button" class="btn btn-primary btn-sm w-100" id="btnAutoRouteCreate" data-i18n="admin.autoRoute.create">创建 AUTO</button>
+                </div>
+              </div>
+              <p id="autoRouteMsg" class="msg small d-none"></p>
+              <div class="table-responsive site-table-scroll console-table-shell">
+                <table class="table table-sm align-middle mb-0">
+                  <thead>
+                    <tr>
+                      <th>ID</th><th>虚拟模型ID</th><th>名称</th><th>策略</th><th>状态</th><th>候选模型ID</th><th>Dry Run</th><th data-i18n="table.action">操作</th>
+                    </tr>
+                  </thead>
+                  <tbody id="autoRouteTableBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+
+          <!-- E. 限流 -->
           <section class="card mb-4" id="rateLimitSection">
             <div class="card-body">
               <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
@@ -236,11 +282,11 @@
             </div>
           </section>
 
-          <!-- E. 使用日志 -->
+          <!-- F. 使用日志 -->
           <section class="card mb-4" id="usageLogSection">
             <div class="card-body">
               <h2 class="h5 mb-3" data-i18n="admin.usageLogs.title">使用日志</h2>
-              <div class="row g-2 mb-3">
+              <div class="row g-2 mb-3 console-toolbar">
                 <div class="col-md-3">
                   <label class="form-label small mb-0" for="usageFilterModel" data-i18n="admin.usageLogs.filterModel">模型</label>
                   <select id="usageFilterModel" class="form-select form-select-sm">
@@ -265,6 +311,7 @@
                       <th>Request ID</th>
                       <th data-i18n="admin.usageLogs.colUser">用户ID</th>
                       <th data-i18n="admin.usageLogs.colModel">模型</th>
+                      <th>AUTO</th>
                       <th data-i18n="admin.usageLogs.colStatus">状态</th>
                       <th data-i18n="admin.usageLogs.colTokens">Tokens</th>
                       <th data-i18n="admin.usageLogs.colCost">费用</th>
@@ -296,7 +343,7 @@
           <section class="card mb-4" id="userListSection">
             <div class="card-body">
               <h2 class="h5 mb-3" data-i18n="admin.users.title">用户列表</h2>
-              <div class="row g-2 mb-3">
+              <div class="row g-2 mb-3 console-toolbar">
                 <div class="col-md-4">
                   <input type="text" class="form-control form-control-sm" id="userSearchEmail" placeholder="按邮箱搜索" data-i18n-placeholder="admin.users.searchPh" />
                 </div>
@@ -462,6 +509,12 @@
                   <button class="btn btn-outline-primary btn-sm" id="monitorRefreshBtn" data-i18n="admin.monitor.refresh">刷新</button>
                   <span class="text-muted small" id="monitorLastRefresh"></span>
                 </div>
+              </div>
+              <div class="monitor-focus-filters mb-3">
+                <button class="btn btn-outline-secondary btn-sm" id="monitorFocusAll">全部</button>
+                <button class="btn btn-outline-danger btn-sm" id="monitorFocusHighError">高错误率</button>
+                <button class="btn btn-outline-warning btn-sm" id="monitorFocusHighLatency">高延迟</button>
+                <button class="btn btn-outline-dark btn-sm" id="monitorFocusOffline">离线账号</button>
               </div>
               <div id="monitorOverviewGrid" class="row g-3"></div>
             </div>

@@ -3,6 +3,7 @@ package mysql
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -20,11 +21,17 @@ func NewModelRepo(db *sql.DB) *ModelRepo {
 
 func (r *ModelRepo) Create(ctx context.Context, m *domain.Model) error {
 	const q = `INSERT INTO models (model_name, provider, model_type, billing_type,
-		input_price, output_price, reasoning_price, per_request_price, is_active, is_listed)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+		input_price, output_price, reasoning_price, per_request_price, is_active, is_listed,
+		is_virtual, virtual_type, context_window_tokens, capability_tags)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	capabilityTags, err := marshalStringSliceJSON(m.CapabilityTags)
+	if err != nil {
+		return err
+	}
 	res, err := r.db.ExecContext(ctx, q,
 		m.ModelName, m.Provider, m.ModelType, m.BillingType,
 		m.InputPrice, m.OutputPrice, m.ReasoningPrice, m.PerRequestPrice, m.IsActive, m.IsListed,
+		m.IsVirtual, m.VirtualType, m.ContextWindowTokens, capabilityTags,
 	)
 	if err != nil {
 		return err
@@ -40,7 +47,8 @@ func (r *ModelRepo) Create(ctx context.Context, m *domain.Model) error {
 func (r *ModelRepo) FindByID(ctx context.Context, id int64) (*domain.Model, error) {
 	const q = `SELECT id, model_name, provider, model_type, billing_type,
 		input_price, output_price, reasoning_price, per_request_price,
-		is_active, is_listed, last_test_ok, last_test_at, last_test_latency_ms, last_test_error,
+		is_active, is_listed, is_virtual, virtual_type, context_window_tokens, capability_tags,
+		last_test_ok, last_test_at, last_test_latency_ms, last_test_error,
 		created_at, updated_at
 		FROM models WHERE id = ?`
 	row := r.db.QueryRowContext(ctx, q, id)
@@ -50,7 +58,8 @@ func (r *ModelRepo) FindByID(ctx context.Context, id int64) (*domain.Model, erro
 func (r *ModelRepo) FindByName(ctx context.Context, name string) (*domain.Model, error) {
 	const q = `SELECT id, model_name, provider, model_type, billing_type,
 		input_price, output_price, reasoning_price, per_request_price,
-		is_active, is_listed, last_test_ok, last_test_at, last_test_latency_ms, last_test_error,
+		is_active, is_listed, is_virtual, virtual_type, context_window_tokens, capability_tags,
+		last_test_ok, last_test_at, last_test_latency_ms, last_test_error,
 		created_at, updated_at
 		FROM models WHERE model_name = ?`
 	row := r.db.QueryRowContext(ctx, q, name)
@@ -61,7 +70,8 @@ func (r *ModelRepo) List(ctx context.Context, filter domain.ListFilter) ([]*doma
 	var b strings.Builder
 	b.WriteString(`SELECT id, model_name, provider, model_type, billing_type,
 		input_price, output_price, reasoning_price, per_request_price,
-		is_active, is_listed, last_test_ok, last_test_at, last_test_latency_ms, last_test_error,
+		is_active, is_listed, is_virtual, virtual_type, context_window_tokens, capability_tags,
+		last_test_ok, last_test_at, last_test_latency_ms, last_test_error,
 		created_at, updated_at
 		FROM models WHERE 1=1`)
 	args := make([]any, 0, 2)
@@ -94,7 +104,8 @@ func (r *ModelRepo) List(ctx context.Context, filter domain.ListFilter) ([]*doma
 func (r *ModelRepo) ListListedModels(ctx context.Context) ([]*domain.Model, error) {
 	const q = `SELECT id, model_name, provider, model_type, billing_type,
 		input_price, output_price, reasoning_price, per_request_price,
-		is_active, is_listed, last_test_ok, last_test_at, last_test_latency_ms, last_test_error,
+		is_active, is_listed, is_virtual, virtual_type, context_window_tokens, capability_tags,
+		last_test_ok, last_test_at, last_test_latency_ms, last_test_error,
 		created_at, updated_at
 		FROM models WHERE is_active = 1 AND is_listed = 1 ORDER BY model_name`
 	rows, err := r.db.QueryContext(ctx, q)
@@ -115,12 +126,17 @@ func (r *ModelRepo) ListListedModels(ctx context.Context) ([]*domain.Model, erro
 
 func (r *ModelRepo) Update(ctx context.Context, m *domain.Model) error {
 	const q = `UPDATE models SET model_name=?, provider=?, model_type=?, billing_type=?,
-		input_price=?, output_price=?, reasoning_price=?, per_request_price=?, is_active=?, is_listed=?
+		input_price=?, output_price=?, reasoning_price=?, per_request_price=?, is_active=?, is_listed=?,
+		is_virtual=?, virtual_type=?, context_window_tokens=?, capability_tags=?
 		WHERE id=?`
-	_, err := r.db.ExecContext(ctx, q,
+	capabilityTags, err := marshalStringSliceJSON(m.CapabilityTags)
+	if err != nil {
+		return err
+	}
+	_, err = r.db.ExecContext(ctx, q,
 		m.ModelName, m.Provider, m.ModelType, m.BillingType,
 		m.InputPrice, m.OutputPrice, m.ReasoningPrice, m.PerRequestPrice,
-		m.IsActive, m.IsListed, m.ID,
+		m.IsActive, m.IsListed, m.IsVirtual, m.VirtualType, m.ContextWindowTokens, capabilityTags, m.ID,
 	)
 	return err
 }
@@ -142,7 +158,8 @@ func (r *ModelRepo) ListByIDs(ctx context.Context, ids []int64) ([]*domain.Model
 	}
 	q := fmt.Sprintf(`SELECT id, model_name, provider, model_type, billing_type,
 		input_price, output_price, reasoning_price, per_request_price,
-		is_active, is_listed, last_test_ok, last_test_at, last_test_latency_ms, last_test_error,
+		is_active, is_listed, is_virtual, virtual_type, context_window_tokens, capability_tags,
+		last_test_ok, last_test_at, last_test_latency_ms, last_test_error,
 		created_at, updated_at
 		FROM models WHERE id IN (%s) ORDER BY id`,
 		strings.Join(placeholders, ","))
@@ -175,7 +192,8 @@ func (r *ModelRepo) UpdateLastTest(ctx context.Context, modelID int64, success b
 
 func scanModelFromRow(s scanner) (*domain.Model, error) {
 	var m domain.Model
-	var isActive, isListed int
+	var isActive, isListed, isVirtual int
+	var capabilityTags sql.NullString
 	var lastOK sql.NullBool
 	var lastAt sql.NullTime
 	var lastLat sql.NullInt32
@@ -183,7 +201,8 @@ func scanModelFromRow(s scanner) (*domain.Model, error) {
 	err := s.Scan(
 		&m.ID, &m.ModelName, &m.Provider, &m.ModelType, &m.BillingType,
 		&m.InputPrice, &m.OutputPrice, &m.ReasoningPrice, &m.PerRequestPrice,
-		&isActive, &isListed, &lastOK, &lastAt, &lastLat, &lastErr,
+		&isActive, &isListed, &isVirtual, &m.VirtualType, &m.ContextWindowTokens, &capabilityTags,
+		&lastOK, &lastAt, &lastLat, &lastErr,
 		&m.CreatedAt, &m.UpdatedAt,
 	)
 	if err != nil {
@@ -191,6 +210,10 @@ func scanModelFromRow(s scanner) (*domain.Model, error) {
 	}
 	m.IsActive = isActive == 1
 	m.IsListed = isListed == 1
+	m.IsVirtual = isVirtual == 1
+	if capabilityTags.Valid && strings.TrimSpace(capabilityTags.String) != "" {
+		_ = json.Unmarshal([]byte(capabilityTags.String), &m.CapabilityTags)
+	}
 	if lastOK.Valid {
 		v := lastOK.Bool
 		m.LastTestPassed = &v
@@ -207,6 +230,17 @@ func scanModelFromRow(s scanner) (*domain.Model, error) {
 		m.LastTestError = lastErr.String
 	}
 	return &m, nil
+}
+
+func marshalStringSliceJSON(values []string) (any, error) {
+	if len(values) == 0 {
+		return nil, nil
+	}
+	b, err := json.Marshal(values)
+	if err != nil {
+		return nil, err
+	}
+	return string(b), nil
 }
 
 func scanModelRow(row *sql.Row) (*domain.Model, error) {

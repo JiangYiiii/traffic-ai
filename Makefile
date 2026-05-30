@@ -1,4 +1,4 @@
-.PHONY: all build run-control run-gateway test lint migrate-up migrate-down clean sync-web-console check-web-console-sync
+.PHONY: all build run-control run-gateway test lint migrate-up migrate-down deploy-init-db clean sync-web-console check-web-console-sync
 
 # 前端资源同步约定：
 #   - 构建产物唯一来源：internal/interfaces/api/static/（由 Go //go:embed 打包）
@@ -37,6 +37,10 @@ migrate-up:
 
 migrate-down:
 	golang-migrate -path migrations -database "mysql://root@tcp(127.0.0.1:3306)/traffic_ai" -verbose down 1
+
+deploy-init-db:
+	chmod +x scripts/deploy-init-db.sh
+	./scripts/deploy-init-db.sh
 
 clean:
 	rm -rf $(BIN_DIR)

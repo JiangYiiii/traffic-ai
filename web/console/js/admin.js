@@ -33,6 +33,7 @@
   let tgLinksModal;
   let rateLimitModal;
   let bulkPricingModal;
+  const ADMIN_ACTIVE_TAB_KEY = "traffic_ai_admin_active_tab";
   /** @type {Array<object>} 当前模型表数据，供状态切换等使用 */
   let lastLoadedModels = [];
   /** 串行化模型列表渲染，避免并发 loadModels 造成表格错乱或同一操作被绑定多次 */
@@ -63,6 +64,7 @@
   }
 
   let currentRole = "";
+  let currentUserId = 0;
 
   function isAdminRole(role) {
     return role === "admin" || role === "super_admin";
@@ -70,6 +72,33 @@
 
   function isSuperAdmin() {
     return currentRole === "super_admin";
+  }
+
+  function roleLabel(role) {
+    const map = {
+      default: "admin.users.roleDefault",
+      admin: "admin.users.roleAdmin",
+      super_admin: "admin.users.roleSuperAdmin",
+    };
+    const key = map[role];
+    return key ? t(key) : role;
+  }
+
+  function canManageUserRole(u) {
+    return isSuperAdmin() && u.id !== currentUserId;
+  }
+
+  function canManageUserStatus(u) {
+    if (u.id === currentUserId) return false;
+    if (isSuperAdmin()) return true;
+    if (currentRole === "admin" && u.role === "super_admin") return false;
+    return isAdminRole(currentRole);
+  }
+
+  async function patchUser(userId, payload) {
+    await api(`/admin/users/${userId}`, { method: "PATCH", body: JSON.stringify(payload) });
+    showToast(t("admin.savedOk"), true);
+    await loadUsers();
   }
 
   function applyRoleTabs() {
@@ -111,6 +140,16 @@
     el.classList.remove("d-none");
     clearTimeout(showToast._t);
     showToast._t = setTimeout(() => el.classList.add("d-none"), 4000);
+  }
+
+  function bindEnterSubmit(inputId, action) {
+    const el = document.getElementById(inputId);
+    if (!el || typeof action !== "function") return;
+    el.addEventListener("keydown", (ev) => {
+      if (ev.key !== "Enter") return;
+      ev.preventDefault();
+      action();
+    });
   }
 
   function billingLabel(b) {
@@ -1415,6 +1454,168 @@
     }
   }
 
+  async function populateAutoRouteCandidateSelect() {
+    const sel = document.getElementById("autoRouteCandidates");
+    if (!sel) return;
+    let models = lastLoadedModels;
+    if (!models.length) {
+      try {
+        models = (await api("/admin/models")) || [];
+      } catch (_) {
+        models = [];
+      }
+    }
+    const real = models.filter((m) => !m.is_virtual && m.is_active);
+    sel.innerHTML = real.length
+      ? real.map((m) => `<option value="${m.id}">${escapeHtml(m.model_name)} (#${m.id})</option>`).join("")
+      : `<option disabled>${escapeHtml(t("admin.autoRoute.noCandidates"))}</option>`;
+  }
+
+  async function loadAutoRoutes() {
+    await populateAutoRouteCandidateSelect();
+    const tbody = document.getElementById("autoRouteTableBody");
+    if (!tbody) return;
+    const data = await api("/admin/auto-routes");
+    const list = data?.items || [];
+    tbody.innerHTML = "";
+    if (!list.length) {
+      tbody.innerHTML = `<tr><td colspan="8" class="text-muted text-center py-3">暂无 AUTO 路由</td></tr>`;
+      return;
+    }
+    for (const r of list) {
+      let candidates = [];
+      try {
+        const cd = await api(`/admin/auto-routes/${r.id}/candidates`);
+        candidates = cd?.items || [];
+      } catch (_) {
+        candidates = [];
+      }
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${r.id}</td>
+        <td>${r.virtual_model_id}</td>
+        <td>${escapeHtml(r.name || "—")}</td>
+        <td>${escapeHtml(r.strategy || "—")}</td>
+        <td><span class="pill ${r.is_active ? "ok" : "off"}">${r.is_active ? t("status.enabled") : t("status.disabled")}</span></td>
+        <td class="small">${escapeHtml(candidates.map((c) => c.target_model_id).join(", ") || "—")}</td>
+        <td><button type="button" class="ghost btn-sm" data-auto-test="${r.id}" data-auto-vmid="${r.virtual_model_id}">测试</button></td>
+        <td>
+          <div class="d-flex flex-wrap gap-1">
+            <input type="number" class="form-control form-control-sm" style="width: 7rem" placeholder="候选模型ID" data-auto-candidate="${r.id}" />
+            <button type="button" class="ghost btn-sm" data-auto-add-candidate="${r.id}">添加候选</button>
+            <button type="button" class="ghost btn-sm text-danger" data-auto-delete="${r.id}">${escapeHtml(t("action.delete"))}</button>
+          </div>
+        </td>`;
+      tbody.appendChild(tr);
+    }
+    tbody.querySelectorAll("[data-auto-delete]").forEach((b) => {
+      b.addEventListener("click", async () => {
+        await api(`/admin/auto-routes/${b.getAttribute("data-auto-delete")}`, { method: "DELETE" });
+        showToast(t("admin.savedOk"), true);
+        await loadAutoRoutes();
+      });
+    });
+    tbody.querySelectorAll("[data-auto-add-candidate]").forEach((b) => {
+      b.addEventListener("click", async () => {
+        const policyId = b.getAttribute("data-auto-add-candidate");
+        const input = tbody.querySelector(`[data-auto-candidate="${policyId}"]`);
+        const target_model_id = Number(input?.value || 0);
+        if (!target_model_id) return;
+        await api(`/admin/auto-routes/${policyId}/candidates`, {
+          method: "POST",
+          body: JSON.stringify({ target_model_id, weight: 1, quality_score: 50, is_active: true }),
+        });
+        showToast(t("admin.savedOk"), true);
+        await loadAutoRoutes();
+      });
+    });
+    tbody.querySelectorAll("[data-auto-test]").forEach((b) => {
+      b.addEventListener("click", async () => {
+        const policyId = b.getAttribute("data-auto-test");
+        const virtualModelId = Number(b.getAttribute("data-auto-vmid"));
+        const models = await api("/admin/models");
+        const vm = (models || []).find((m) => Number(m.id) === virtualModelId);
+        const requested_model = vm?.model_name || "auto";
+        const result = await api(`/admin/auto-routes/${policyId}/test`, {
+          method: "POST",
+          body: JSON.stringify({ token_group: "default", requested_model, protocol: "openai", estimated_tokens: 1000, stream: true }),
+        });
+        const msg = document.getElementById("autoRouteMsg");
+        if (msg) {
+          msg.textContent = `Dry run: ${result.requested_model} -> ${result.resolved_model} / account ${result.model_account_id}`;
+          msg.classList.remove("d-none", "err");
+          msg.classList.add("ok");
+        }
+      });
+    });
+  }
+
+  async function createAutoRoute() {
+    const msg = document.getElementById("autoRouteMsg");
+    msg?.classList.add("d-none");
+    const virtualModelName = document.getElementById("autoVirtualModelName")?.value?.trim() || "";
+    const strategy = document.getElementById("autoRouteStrategy")?.value || "balanced";
+    const candidateSel = document.getElementById("autoRouteCandidates");
+    const candidateIds = Array.from(candidateSel?.selectedOptions || [])
+      .map((o) => Number(o.value))
+      .filter((id) => id > 0);
+    try {
+      if (!virtualModelName) {
+        throw new Error(t("admin.autoRoute.modelNameRequired"));
+      }
+      const created = await api("/admin/models", {
+        method: "POST",
+        body: JSON.stringify({
+          model_name: virtualModelName,
+          provider: "auto",
+          model_type: "chat",
+          billing_type: "per_token",
+          is_active: true,
+          is_listed: true,
+          is_virtual: true,
+          virtual_type: "auto_route",
+          capability_tags: ["streaming"],
+        }),
+      });
+      const virtualModelId = Number(created?.id || 0);
+      if (!virtualModelId) {
+        throw new Error(t("admin.autoRoute.createModelFailed"));
+      }
+      const policy = await api("/admin/auto-routes", {
+        method: "POST",
+        body: JSON.stringify({
+          virtual_model_id: virtualModelId,
+          name: virtualModelName,
+          strategy,
+          rules_json: "",
+          is_active: true,
+          version: 1,
+        }),
+      });
+      const policyId = Number(policy?.id || 0);
+      if (!policyId) {
+        throw new Error(t("admin.autoRoute.createPolicyFailed"));
+      }
+      for (const targetId of candidateIds) {
+        await api(`/admin/auto-routes/${policyId}/candidates`, {
+          method: "POST",
+          body: JSON.stringify({ target_model_id: targetId, weight: 1, quality_score: 50, is_active: true }),
+        });
+      }
+      document.getElementById("autoVirtualModelName").value = "";
+      if (candidateSel) Array.from(candidateSel.options).forEach((o) => { o.selected = false; });
+      showToast(t("admin.savedOk"), true);
+      await loadModels();
+      await loadAutoRoutes();
+    } catch (e) {
+      if (msg) {
+        msg.textContent = e.message;
+        msg.classList.remove("d-none", "ok");
+        msg.classList.add("err");
+      }
+    }
+  }
+
   async function loadRateLimits() {
     const tbody = document.getElementById("rateLimitTableBody");
     if (!tbody) return;
@@ -1667,14 +1868,49 @@
     }
     list.forEach((u) => {
       const tr = document.createElement("tr");
+      const roleCell = canManageUserRole(u)
+        ? `<select class="form-select form-select-sm user-role-select" data-user-id="${u.id}" aria-label="${escapeHtml(t("common.role"))}">
+            ${["default", "admin", "super_admin"].map((r) => `<option value="${r}" ${r === u.role ? "selected" : ""}>${escapeHtml(roleLabel(r))}</option>`).join("")}
+          </select>`
+        : escapeHtml(roleLabel(u.role));
+      const actions = [`<button type="button" class="ghost btn-sm" data-charge-user="${u.id}">${escapeHtml(t("admin.charge.title"))}</button>`];
+      if (canManageUserStatus(u)) {
+        const label = u.is_active ? t("admin.users.disable") : t("admin.users.enable");
+        actions.push(`<button type="button" class="ghost btn-sm ${u.is_active ? "text-danger" : ""}" data-toggle-user="${u.id}" data-active="${u.is_active ? "1" : "0"}">${escapeHtml(label)}</button>`);
+      }
       tr.innerHTML = `
         <td>${u.id}</td>
         <td>${escapeHtml(u.email)}</td>
-        <td>${escapeHtml(u.role)}</td>
+        <td>${roleCell}</td>
         <td><span class="pill ${u.is_active ? "ok" : "off"}">${u.is_active ? t("status.enabled") : t("status.disabled")}</span></td>
         <td class="small">${fmtTime(u.created_at)}</td>
-        <td><button type="button" class="ghost btn-sm" data-charge-user="${u.id}">${escapeHtml(t("admin.charge.title"))}</button></td>`;
+        <td><div class="d-flex flex-wrap gap-1">${actions.join("")}</div></td>`;
       tbody.appendChild(tr);
+    });
+    tbody.querySelectorAll(".user-role-select").forEach((sel) => {
+      sel.addEventListener("change", async () => {
+        const uid = Number(sel.getAttribute("data-user-id"));
+        const prev = sel.dataset.prevRole || sel.value;
+        sel.dataset.prevRole = sel.value;
+        try {
+          await patchUser(uid, { role: sel.value });
+        } catch (e) {
+          sel.value = prev;
+          showToast(e.message, false);
+        }
+      });
+      sel.dataset.prevRole = sel.value;
+    });
+    tbody.querySelectorAll("[data-toggle-user]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const uid = Number(btn.getAttribute("data-toggle-user"));
+        const active = btn.getAttribute("data-active") === "1";
+        try {
+          await patchUser(uid, { is_active: !active });
+        } catch (e) {
+          showToast(e.message, false);
+        }
+      });
     });
     tbody.querySelectorAll("[data-charge-user]").forEach((btn) => {
       btn.addEventListener("click", () => {
@@ -1710,16 +1946,20 @@
     const list = data.list || [];
     tbody.innerHTML = "";
     if (!list.length) {
-      tbody.innerHTML = `<tr><td colspan="8" class="text-muted text-center py-3">${escapeHtml(t("admin.usageLogs.empty"))}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="9" class="text-muted text-center py-3">${escapeHtml(t("admin.usageLogs.empty"))}</td></tr>`;
       updateUsagePagination();
       return;
     }
     list.forEach((r) => {
       const tr = document.createElement("tr");
+      const autoRoute = r.requested_model && r.resolved_model && r.requested_model !== r.resolved_model
+        ? `${r.requested_model} -> ${r.resolved_model}`
+        : "—";
       tr.innerHTML = `
         <td class="small text-break">${escapeHtml(r.request_id)}</td>
         <td>${r.user_id}</td>
         <td>${escapeHtml(r.model)}</td>
+        <td class="small">${escapeHtml(autoRoute)}</td>
         <td><span class="pill ${r.status === "success" ? "ok" : "off"}">${escapeHtml(r.status)}</span></td>
         <td>${r.total_tokens}</td>
         <td>${fmtMicroUsd(r.cost_micro_usd)}</td>
@@ -1748,6 +1988,7 @@
       await rebuildUpstreamCatalog();
       await loadModels();
       await loadTokenGroups();
+      await loadAutoRoutes();
       await loadRateLimits();
       await loadUsageLogs();
     }
@@ -1775,6 +2016,7 @@
         return;
       }
       currentRole = profile.role;
+      currentUserId = Number(profile.id) || 0;
       applyRoleTabs();
       loading.classList.add("d-none");
       app.classList.remove("d-none");
@@ -1785,6 +2027,11 @@
         } catch (_) {}
       }
       await refreshAll();
+      const savedTabId = localStorage.getItem(ADMIN_ACTIVE_TAB_KEY);
+      if (savedTabId) {
+        const tabBtn = document.getElementById(savedTabId);
+        if (tabBtn && !tabBtn.closest(".d-none")) tabBtn.click();
+      }
     } catch (e) {
       loading.classList.add("d-none");
       denied.classList.remove("d-none");
@@ -1802,6 +2049,11 @@
     rateLimitModal = new bootstrap.Modal(document.getElementById("rateLimitModal"));
 
     installModelTableRowDelegation();
+    document.querySelectorAll('#adminTabs button[data-bs-toggle="tab"]').forEach((btn) => {
+      btn.addEventListener("shown.bs.tab", () => {
+        if (btn.id) localStorage.setItem(ADMIN_ACTIVE_TAB_KEY, btn.id);
+      });
+    });
 
     document.getElementById("adminLogoutBtn")?.addEventListener("click", () => {
       localStorage.removeItem("accessToken");
@@ -1833,6 +2085,7 @@
       if (q) q.value = "";
       loadModels();
     });
+    bindEnterSubmit("modelFilterQ", () => loadModels());
     document.getElementById("modelModalSave")?.addEventListener("click", saveModel);
 
     document.getElementById("providerCatalog")?.addEventListener("change", onProviderCatalogChange);
@@ -1940,11 +2193,16 @@
     });
 
     document.getElementById("tgLinksAddBtn")?.addEventListener("click", addTgUpstream);
+    document.getElementById("btnAutoRouteCreate")?.addEventListener("click", createAutoRoute);
 
     document.getElementById("btnRateLimitAdd")?.addEventListener("click", () => openRateLimitModal(null));
     document.getElementById("rateLimitModalSave")?.addEventListener("click", saveRateLimit);
 
     document.getElementById("btnUserSearch")?.addEventListener("click", async () => {
+      userPage = 1;
+      await loadUsers();
+    });
+    bindEnterSubmit("userSearchEmail", async () => {
       userPage = 1;
       await loadUsers();
     });
@@ -1973,6 +2231,14 @@
       usagePage = 1;
       await loadUsageLogs();
     });
+    document.getElementById("usageFilterModel")?.addEventListener("change", async () => {
+      usagePage = 1;
+      await loadUsageLogs();
+    });
+    document.getElementById("usageFilterStatus")?.addEventListener("change", async () => {
+      usagePage = 1;
+      await loadUsageLogs();
+    });
     document.getElementById("usagePrev")?.addEventListener("click", async () => {
       if (usagePage > 1) { usagePage--; await loadUsageLogs(); }
     });
@@ -1997,6 +2263,8 @@
     let monitorCurrentModelID = null;
     let monitorCurrentModelName = null;
     let monitorRefreshTimer = null;
+    let monitorFocusFilter = "all";
+    let monitorLastAccounts = [];
 
     function formatNum(n) {
       if (n == null) return '—';
@@ -2015,6 +2283,23 @@
       return `<span class="badge bg-warning text-dark">${escapeHtml(status)}</span>`;
     }
 
+    function isHighErrorRate(x) {
+      return Number(x?.error_rate || 0) > 0.05;
+    }
+
+    function isHighLatency(x) {
+      const avg = Number(x?.avg_latency_ms || 0);
+      const p95 = Number(x?.p95_latency_ms || 0);
+      return avg > 3000 || p95 > 5000;
+    }
+
+    function applyMonitorFocusToModels(models) {
+      if (monitorFocusFilter === "high_error") return models.filter((m) => isHighErrorRate(m));
+      if (monitorFocusFilter === "high_latency") return models.filter((m) => isHighLatency(m));
+      if (monitorFocusFilter === "offline") return models.filter((m) => Number(m?.offline_accounts || 0) > 0);
+      return models;
+    }
+
     async function loadMonitorOverview() {
       const hours = document.getElementById('monitorHours').value;
       try {
@@ -2027,11 +2312,12 @@
 
     function renderOverviewGrid(models) {
       const grid = document.getElementById('monitorOverviewGrid');
-      if (!models.length) {
+      const filtered = applyMonitorFocusToModels(models || []);
+      if (!filtered.length) {
         grid.innerHTML = `<div class="text-muted">${escapeHtml(t("admin.monitor.empty"))}</div>`;
         return;
       }
-      grid.innerHTML = models.map(m => {
+      grid.innerHTML = filtered.map(m => {
         const errRate = m.error_rate || 0;
         const alertClass = errRate > 0.05 || m.avg_latency_ms > 3000 ? 'border-danger' : '';
         const todayTpl = t("admin.monitor.today")
@@ -2104,7 +2390,8 @@
       try {
         const data = await api(`/admin/monitor/models/${monitorCurrentModelID}?hours=${hours}&granularity=${gran}`);
         renderTrendChart(data.time_series || []);
-        renderAccountTable(data.accounts || []);
+        monitorLastAccounts = data.accounts || [];
+        renderAccountTable(monitorLastAccounts);
       } catch(e) { showToast(t("admin.monitor.detailFail") + ': ' + e.message, false); }
     }
 
@@ -2142,11 +2429,17 @@
 
     function renderAccountTable(accounts) {
       const tbody = document.getElementById('monitorAccountTbody');
-      if (!accounts.length) {
+      const rows = (accounts || []).filter((a) => {
+        if (monitorFocusFilter === "high_error") return isHighErrorRate(a);
+        if (monitorFocusFilter === "high_latency") return isHighLatency(a);
+        if (monitorFocusFilter === "offline") return String(a?.status || "") === "offline";
+        return true;
+      });
+      if (!rows.length) {
         tbody.innerHTML = `<tr><td colspan="8" class="text-center text-muted py-3">${escapeHtml(t("admin.monitor.noAccounts"))}</td></tr>`;
         return;
       }
-      tbody.innerHTML = accounts.map(a => `
+      tbody.innerHTML = rows.map(a => `
         <tr>
           <td>${escapeHtml(a.account_name || ('#' + a.account_id))}</td>
           <td>${escapeHtml(a.provider || '—')}</td>
@@ -2204,6 +2497,26 @@
     document.getElementById('monitorHours').addEventListener('change', loadMonitorOverview);
     document.getElementById('monitorDetailHours').addEventListener('change', loadMonitorModelDetail);
     document.getElementById('monitorDetailGranularity').addEventListener('change', loadMonitorModelDetail);
+    document.getElementById('monitorFocusAll')?.addEventListener('click', () => {
+      monitorFocusFilter = "all";
+      loadMonitorOverview();
+      renderAccountTable(monitorLastAccounts);
+    });
+    document.getElementById('monitorFocusHighError')?.addEventListener('click', () => {
+      monitorFocusFilter = "high_error";
+      loadMonitorOverview();
+      renderAccountTable(monitorLastAccounts);
+    });
+    document.getElementById('monitorFocusHighLatency')?.addEventListener('click', () => {
+      monitorFocusFilter = "high_latency";
+      loadMonitorOverview();
+      renderAccountTable(monitorLastAccounts);
+    });
+    document.getElementById('monitorFocusOffline')?.addEventListener('click', () => {
+      monitorFocusFilter = "offline";
+      loadMonitorOverview();
+      renderAccountTable(monitorLastAccounts);
+    });
 
     // 切换到监控 Tab 时自动加载，并启动 30s 自动刷新
     document.getElementById('tab-monitor').addEventListener('shown.bs.tab', () => {

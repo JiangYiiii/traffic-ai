@@ -5,6 +5,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	appbilling "github.com/trailyai/traffic-ai/internal/application/billing"
+	domainAuth "github.com/trailyai/traffic-ai/internal/domain/auth"
 	"github.com/trailyai/traffic-ai/internal/infrastructure/persistence/mysql"
 	"github.com/trailyai/traffic-ai/internal/interfaces/api/dto"
 	"github.com/trailyai/traffic-ai/pkg/errcode"
@@ -30,6 +31,7 @@ func (h *BillingHandler) RegisterUser(group *gin.RouterGroup) {
 // RegisterAdmin 管理后台路由。
 func (h *BillingHandler) RegisterAdmin(group *gin.RouterGroup) {
 	group.GET("/users", h.listUsers)
+	group.PATCH("/users/:id", h.updateUser)
 	group.POST("/users/:id/charge", h.adminCharge)
 	group.POST("/redeem-codes/batch", h.batchCreateRedeemCodes)
 	group.GET("/redeem-codes", h.listRedeemCodes)
@@ -105,6 +107,91 @@ func (h *BillingHandler) listUsers(c *gin.Context) {
 	response.PageResult(c, dto.ToAdminUserList(users), total, page, pageSize)
 }
 
+func (h *BillingHandler) updateUser(c *gin.Context) {
+	actorID, ok := getUserID(c)
+	if !ok {
+		return
+	}
+	actorRole, _ := getActorRole(c)
+
+	targetID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		response.Fail(c, errcode.ErrBadRequest)
+		return
+	}
+
+	var req dto.AdminUpdateUserReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, errcode.ErrBadRequest)
+		return
+	}
+	if req.Role == nil && req.IsActive == nil {
+		response.Fail(c, errcode.ErrBadRequest)
+		return
+	}
+
+	target, err := h.userRepo.FindByID(c.Request.Context(), targetID)
+	if err != nil {
+		response.Fail(c, errcode.ErrInternal)
+		return
+	}
+	if target == nil {
+		response.Fail(c, errcode.ErrNotFound)
+		return
+	}
+
+	role := target.Role
+	status := target.Status
+
+	if req.Role != nil {
+		if actorRole != domainAuth.RoleSuperAdmin {
+			response.Fail(c, errcode.ErrForbidden)
+			return
+		}
+		if actorID == targetID {
+			response.Fail(c, errcode.ErrForbidden)
+			return
+		}
+		newRole := *req.Role
+		switch newRole {
+		case domainAuth.RoleDefault, domainAuth.RoleAdmin, domainAuth.RoleSuperAdmin:
+			role = newRole
+		default:
+			response.Fail(c, errcode.ErrBadRequest)
+			return
+		}
+	}
+
+	if req.IsActive != nil {
+		if actorRole == domainAuth.RoleAdmin && target.Role == domainAuth.RoleSuperAdmin {
+			response.Fail(c, errcode.ErrForbidden)
+			return
+		}
+		if !*req.IsActive && actorID == targetID {
+			response.Fail(c, errcode.ErrBadRequest)
+			return
+		}
+		if *req.IsActive {
+			status = domainAuth.StatusActive
+		} else {
+			status = domainAuth.StatusFrozen
+		}
+	}
+
+	if role == target.Role && status == target.Status {
+		response.OK(c, dto.ToAdminUserItem(target))
+		return
+	}
+
+	if err := h.userRepo.UpdateRoleAndStatus(c.Request.Context(), targetID, role, status); err != nil {
+		response.Fail(c, errcode.ErrInternal)
+		return
+	}
+	target.Role = role
+	target.Status = status
+	response.OK(c, dto.ToAdminUserItem(target))
+}
+
 func (h *BillingHandler) adminCharge(c *gin.Context) {
 	targetID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
@@ -168,6 +255,15 @@ func (h *BillingHandler) adminListBalanceLogs(c *gin.Context) {
 }
 
 // ---- helpers ----
+
+func getActorRole(c *gin.Context) (string, bool) {
+	v, exists := c.Get("role")
+	if !exists {
+		return "", false
+	}
+	role, ok := v.(string)
+	return role, ok
+}
 
 func parsePage(c *gin.Context) (int, int) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))

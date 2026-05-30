@@ -8,40 +8,52 @@ import (
 
 // UsageLogItem 是 /admin/usage-logs 使用的管理端 DTO。保持 snake_case 以兼容已有前端脚本。
 type UsageLogItem struct {
-	ID           int64  `json:"id"`
-	RequestID    string `json:"request_id"`
-	UserID       int64  `json:"user_id"`
-	APIKeyID     int64  `json:"api_key_id"`
-	Model        string `json:"model"`
-	Protocol     string `json:"protocol"`
-	IsStream     bool   `json:"is_stream"`
-	Status       string `json:"status"`
-	Error        string `json:"error_message,omitempty"`
-	InputTokens  int    `json:"input_tokens"`
-	OutputTokens int    `json:"output_tokens"`
-	TotalTokens  int    `json:"total_tokens"`
-	CostMicroUSD int64  `json:"cost_micro_usd"`
-	LatencyMs    int    `json:"latency_ms"`
-	CreatedAt    string `json:"created_at"`
+	ID                int64  `json:"id"`
+	RequestID         string `json:"request_id"`
+	UserID            int64  `json:"user_id"`
+	APIKeyID          int64  `json:"api_key_id"`
+	Model             string `json:"model"`
+	RequestedModel    string `json:"requested_model"`
+	ResolvedModel     string `json:"resolved_model"`
+	AutoRoutePolicyID int64  `json:"auto_route_policy_id"`
+	RouteMode         string `json:"route_mode"`
+	RouteReason       string `json:"route_reason,omitempty"`
+	RouteScore        int    `json:"route_score"`
+	Protocol          string `json:"protocol"`
+	IsStream          bool   `json:"is_stream"`
+	Status            string `json:"status"`
+	Error             string `json:"error_message,omitempty"`
+	InputTokens       int    `json:"input_tokens"`
+	OutputTokens      int    `json:"output_tokens"`
+	TotalTokens       int    `json:"total_tokens"`
+	CostMicroUSD      int64  `json:"cost_micro_usd"`
+	LatencyMs         int    `json:"latency_ms"`
+	CreatedAt         string `json:"created_at"`
 }
 
 func ToUsageLogItem(l *mysql.UsageLog) UsageLogItem {
 	return UsageLogItem{
-		ID:           l.ID,
-		RequestID:    l.RequestID,
-		UserID:       l.UserID,
-		APIKeyID:     l.APIKeyID,
-		Model:        l.Model,
-		Protocol:     l.Protocol,
-		IsStream:     l.IsStream,
-		Status:       l.Status,
-		Error:        l.ErrorMessage,
-		InputTokens:  l.InputTokens,
-		OutputTokens: l.OutputTokens,
-		TotalTokens:  l.TotalTokens,
-		CostMicroUSD: l.CostMicroUSD,
-		LatencyMs:    l.LatencyMs,
-		CreatedAt:    l.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		ID:                l.ID,
+		RequestID:         l.RequestID,
+		UserID:            l.UserID,
+		APIKeyID:          l.APIKeyID,
+		Model:             l.Model,
+		RequestedModel:    l.RequestedModel,
+		ResolvedModel:     l.ResolvedModel,
+		AutoRoutePolicyID: l.AutoRoutePolicyID,
+		RouteMode:         l.RouteMode,
+		RouteReason:       l.RouteReason,
+		RouteScore:        l.RouteScore,
+		Protocol:          l.Protocol,
+		IsStream:          l.IsStream,
+		Status:            l.Status,
+		Error:             l.ErrorMessage,
+		InputTokens:       l.InputTokens,
+		OutputTokens:      l.OutputTokens,
+		TotalTokens:       l.TotalTokens,
+		CostMicroUSD:      l.CostMicroUSD,
+		LatencyMs:         l.LatencyMs,
+		CreatedAt:         l.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 	}
 }
 
@@ -63,6 +75,12 @@ type UserUsageLogItem struct {
 	TokenName           string `json:"tokenName"`
 	TokenGroup          string `json:"tokenGroup"`
 	Model               string `json:"model"`
+	RequestedModel      string `json:"requestedModel"`
+	ResolvedModel       string `json:"resolvedModel"`
+	AutoRoutePolicyID   int64  `json:"autoRoutePolicyId"`
+	RouteMode           string `json:"routeMode"`
+	RouteReason         string `json:"routeReason"`
+	RouteScore          int    `json:"routeScore"`
 	ReasoningEffort     string `json:"reasoningEffort"`
 	LatencyMs           int    `json:"latencyMs"`
 	Stream              bool   `json:"stream"`
@@ -90,6 +108,12 @@ func ToUserUsageLogItem(l *mysql.UsageLog) UserUsageLogItem {
 		TokenName:           l.JoinTokenName,
 		TokenGroup:          l.JoinTokenGroup,
 		Model:               l.Model,
+		RequestedModel:      l.RequestedModel,
+		ResolvedModel:       l.ResolvedModel,
+		AutoRoutePolicyID:   l.AutoRoutePolicyID,
+		RouteMode:           l.RouteMode,
+		RouteReason:         l.RouteReason,
+		RouteScore:          l.RouteScore,
 		ReasoningEffort:     l.ReasoningEffort,
 		LatencyMs:           l.LatencyMs,
 		Stream:              l.IsStream,
