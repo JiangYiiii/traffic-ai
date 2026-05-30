@@ -30,7 +30,7 @@ FROM alpine:3.20 AS production
 
 ARG BUILD_TARGET=control
 
-RUN apk add --no-cache ca-certificates tzdata curl
+RUN apk add --no-cache ca-certificates tzdata curl bash
 ENV TZ=Asia/Shanghai
 
 WORKDIR /app
