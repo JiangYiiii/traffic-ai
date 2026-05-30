@@ -12,8 +12,17 @@ func HealthzHandler() gin.HandlerFunc {
 	return func(c *gin.Context) { c.String(200, "ok") }
 }
 
-// MountRootProbes 在 Engine 根路径注册 /healthz、/readyz，供 K8s 探针使用（与 path_prefix 无关）。
-func MountRootProbes(r *gin.Engine, db *sql.DB, rdb *redis.Client) {
-	r.GET("/healthz", HealthzHandler())
-	r.GET("/readyz", ReadyzHandler(db, rdb))
+// MountProbes 注册健康检查。
+// prefix 为空时仅在 group 注册 /healthz；有 prefix 时在 Engine 根路径额外注册，供 K8s 探针打 /healthz。
+func MountProbes(r *gin.Engine, g *gin.RouterGroup, prefix string, db *sql.DB, rdb *redis.Client) {
+	healthz := HealthzHandler()
+	readyz := ReadyzHandler(db, rdb)
+
+	g.GET("/healthz", healthz)
+	g.GET("/readyz", readyz)
+
+	if prefix != "" {
+		r.GET("/healthz", healthz)
+		r.GET("/readyz", readyz)
+	}
 }

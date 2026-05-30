@@ -87,10 +87,7 @@ type mountOptions struct {
 func mountControlRoutes(r *gin.Engine, cfg *config.Config, db *sql.DB, rdb *redis.Client, prefix string, p *controlPlane, opts mountOptions) {
 	g := r.Group(prefix)
 
-	health.MountRootProbes(r, db, rdb)
-
-	g.GET("/healthz", health.HealthzHandler())
-	g.GET("/readyz", health.ReadyzHandler(db, rdb))
+	health.MountProbes(r, g, prefix, db, rdb)
 	health.RegisterDebugRoutes(g, &cfg.Redis, rdb)
 	g.GET("/traffic-config.js", trafficConfigHandler(cfg))
 

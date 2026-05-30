@@ -33,11 +33,8 @@ func NewRouter(cfg *config.Config, db *sql.DB, rdb *redis.Client, metrics *Metri
 	prefix := cfg.Server.NormalizedGatewayPathPrefix()
 	g := r.Group(prefix)
 
-	health.MountRootProbes(r, db, rdb)
-
-	g.GET("/healthz", health.HealthzHandler())
+	health.MountProbes(r, g, prefix, db, rdb)
 	g.GET("/metrics", gin.WrapH(metrics.Handler()))
-	g.GET("/readyz", health.ReadyzHandler(db, rdb))
 	health.RegisterDebugRoutes(g, &cfg.Redis, rdb)
 
 	// ---- 组装依赖 ----
