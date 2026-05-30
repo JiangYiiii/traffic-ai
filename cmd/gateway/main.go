@@ -49,6 +49,12 @@ func main() {
 		logger.L.Warnw("TRAFFIC_REDIS_SKIP_CHECK=1: redis startup ping and /readyz redis check disabled; use GET /debug/redis for diagnostics")
 	}
 
+	logger.L.Infow("traffic-ai gateway configured",
+		"gateway_port", cfg.Server.GatewayPort,
+		"gateway_path_prefix", cfg.Server.NormalizedGatewayPathPrefix(),
+		"healthz", "http://0.0.0.0:"+fmt.Sprintf("%d", cfg.Server.GatewayPort)+"/healthz",
+	)
+
 	metrics := gateway.NewMetrics()
 
 	// 上游 HTTP 客户端池化：按账号缓存独立 Transport，支持分项超时。

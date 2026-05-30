@@ -50,6 +50,14 @@ func main() {
 		logger.L.Warnw("TRAFFIC_REDIS_SKIP_CHECK=1: redis startup ping and /readyz redis check disabled; use GET /debug/redis for diagnostics")
 	}
 
+	logger.L.Infow("traffic-ai control configured",
+		"control_port", cfg.Server.ControlPort,
+		"admin_control_port", cfg.Server.AdminControlPort,
+		"control_path_prefix", cfg.Server.NormalizedControlPathPrefix(),
+		"unified", cfg.Server.UnifiedControlPort(),
+		"healthz", "http://0.0.0.0:"+fmt.Sprintf("%d", cfg.Server.ControlPort)+"/healthz",
+	)
+
 	servers := buildControlServers(cfg, db, rdb)
 	for _, srv := range servers {
 		go func(s *http.Server) {
