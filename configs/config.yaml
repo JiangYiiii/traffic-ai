@@ -3,6 +3,9 @@ server:
   admin_control_port: 8083
   gateway_port: 18081
   mode: debug  # debug | release
+  # 同域名多服务按路径路由时配置（空表示根路径，与现有行为兼容）
+  # control_path_prefix: /traffic-console
+  # gateway_path_prefix: /traffic-gateway
 
 database:
   host: 127.0.0.1

@@ -6,6 +6,8 @@ server:
   admin_control_port: 8083
   gateway_port: 8081
   mode: release
+  # control_path_prefix: /traffic-console
+  # gateway_path_prefix: /traffic-gateway
 
 database:
   host: 127.0.0.1          # 或 DB_HOST 环境变量

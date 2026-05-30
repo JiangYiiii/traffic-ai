@@ -76,7 +76,7 @@ func newControlPlane(cfg *config.Config, db *sql.DB, rdb *redis.Client) *control
 	// control 面不参与数据面熔断决策，传 nil 即可（选号走全量候选）。
 	routingUC := approuting.NewUseCase(tokenGroupRepo, modelRepo, modelAccountRepo, aesKey, cfg.OAuth, nil, autoRouteRepo)
 
-	oauthUC := appoauth.NewUseCase(cfg.OAuth, oauthStateRepo, aesKey)
+	oauthUC := appoauth.NewUseCase(cfg.OAuth, cfg.Server, oauthStateRepo, aesKey)
 	monitorUC := appmonitor.NewUseCase(monitorRepo, modelRepo, modelAccountRepo, monitorCounter)
 
 	var rlUC *appratelimit.UseCase
@@ -102,35 +102,35 @@ func newControlPlane(cfg *config.Config, db *sql.DB, rdb *redis.Client) *control
 	}
 }
 
-func (p *controlPlane) registerUserAPI(r *gin.Engine) {
-	p.authHandler.Register(r.Group("/auth"))
+func (p *controlPlane) registerUserAPI(g *gin.RouterGroup) {
+	p.authHandler.Register(g.Group("/auth"))
 
-	accountGroup := r.Group("/account")
+	accountGroup := g.Group("/account")
 	accountGroup.Use(middleware.JWTAuth(p.jwtMgr))
 	p.accountHandler.Register(accountGroup)
 
-	meGroup := r.Group("/me")
+	meGroup := g.Group("/me")
 	meGroup.Use(middleware.JWTAuth(p.jwtMgr))
 	p.tokenHandler.Register(meGroup)
 	p.billingHandler.RegisterUser(meGroup)
 	p.modelHandler.RegisterUser(meGroup)
 }
 
-func (p *controlPlane) registerAdminAPI(r *gin.Engine) {
-	p.authHandler.Register(r.Group("/auth"))
+func (p *controlPlane) registerAdminAPI(g *gin.RouterGroup) {
+	p.authHandler.Register(g.Group("/auth"))
 
-	accountGroup := r.Group("/account")
+	accountGroup := g.Group("/account")
 	accountGroup.Use(middleware.JWTAuth(p.jwtMgr))
 	p.accountHandler.Register(accountGroup)
 
 	// 客户管理端 —— admin 或 super_admin 均可访问
-	customerGroup := r.Group("/admin")
+	customerGroup := g.Group("/admin")
 	customerGroup.Use(middleware.JWTAuth(p.jwtMgr))
 	customerGroup.Use(middleware.RequireAdmin())
 	p.billingHandler.RegisterAdmin(customerGroup)
 
 	// 模型管理端 + 监控端 —— 仅 super_admin 可访问
-	modelMgmtGroup := r.Group("/admin")
+	modelMgmtGroup := g.Group("/admin")
 	modelMgmtGroup.Use(middleware.JWTAuth(p.jwtMgr))
 	modelMgmtGroup.Use(middleware.RequireSuperAdmin())
 	p.modelHandler.Register(modelMgmtGroup)
@@ -140,5 +140,5 @@ func (p *controlPlane) registerAdminAPI(r *gin.Engine) {
 	p.monitorHandler.Register(modelMgmtGroup)
 
 	// OAuth callback 不需要认证（浏览器直接跳转，不带 Authorization header）
-	p.oauthHandler.RegisterCallback(r)
+	p.oauthHandler.RegisterCallback(g)
 }

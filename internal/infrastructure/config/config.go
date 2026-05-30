@@ -77,10 +77,14 @@ type OAuthProviderConfig struct {
 }
 
 type ServerConfig struct {
-	ControlPort     int `yaml:"control_port"`
-	AdminControlPort int `yaml:"admin_control_port"`
-	GatewayPort     int `yaml:"gateway_port"`
-	Mode            string `yaml:"mode"`
+	ControlPort      int    `yaml:"control_port"`
+	AdminControlPort int    `yaml:"admin_control_port"`
+	GatewayPort      int    `yaml:"gateway_port"`
+	Mode             string `yaml:"mode"`
+	// ControlPathPrefix 控制面 HTTP 路径前缀，如 /traffic-console；空表示根路径。
+	ControlPathPrefix string `yaml:"control_path_prefix"`
+	// GatewayPathPrefix 网关 HTTP 路径前缀，如 /traffic-gateway；空表示根路径。
+	GatewayPathPrefix string `yaml:"gateway_path_prefix"`
 }
 
 type DatabaseConfig struct {
@@ -299,6 +303,12 @@ func overrideFromEnv(cfg *Config) {
 		if _, err := fmt.Sscanf(v, "%d", &p); err == nil && p > 0 {
 			cfg.Server.GatewayPort = p
 		}
+	}
+	if v := os.Getenv("CONTROL_PATH_PREFIX"); v != "" {
+		cfg.Server.ControlPathPrefix = v
+	}
+	if v := os.Getenv("GATEWAY_PATH_PREFIX"); v != "" {
+		cfg.Server.GatewayPathPrefix = v
 	}
 	if v := os.Getenv("TRAFFIC_UPSTREAM_ENABLED"); v != "" {
 		switch v {

@@ -22,13 +22,18 @@ import (
 )
 
 type UseCase struct {
-	oauthCfg  config.OAuthConfig
-	stateRepo *mysql.OAuthStateRepo
-	aesKey    []byte
+	oauthCfg   config.OAuthConfig
+	serverCfg  config.ServerConfig
+	stateRepo  *mysql.OAuthStateRepo
+	aesKey     []byte
 }
 
-func NewUseCase(oauthCfg config.OAuthConfig, stateRepo *mysql.OAuthStateRepo, aesKey []byte) *UseCase {
-	return &UseCase{oauthCfg: oauthCfg, stateRepo: stateRepo, aesKey: aesKey}
+func NewUseCase(oauthCfg config.OAuthConfig, serverCfg config.ServerConfig, stateRepo *mysql.OAuthStateRepo, aesKey []byte) *UseCase {
+	return &UseCase{oauthCfg: oauthCfg, serverCfg: serverCfg, stateRepo: stateRepo, aesKey: aesKey}
+}
+
+func (uc *UseCase) redirectURI() string {
+	return strings.TrimRight(uc.oauthCfg.PublicBaseURL, "/") + uc.serverCfg.OAuthCallbackPath()
 }
 
 // CallbackResult 是 token 交换的返回结构。
@@ -71,7 +76,7 @@ func (uc *UseCase) StartAuth(ctx context.Context, providerID string) (string, er
 		return "", errcode.ErrInternal
 	}
 
-	redirectURI := strings.TrimRight(uc.oauthCfg.PublicBaseURL, "/") + "/admin/oauth/callback"
+	redirectURI := uc.redirectURI()
 
 	params := url.Values{}
 	params.Set("response_type", "code")
@@ -102,7 +107,7 @@ func (uc *UseCase) HandleCallback(ctx context.Context, state, code string) (*Cal
 		return nil, errcode.ErrOAuthNotConfigured
 	}
 
-	redirectURI := strings.TrimRight(uc.oauthCfg.PublicBaseURL, "/") + "/admin/oauth/callback"
+	redirectURI := uc.redirectURI()
 
 	body := url.Values{}
 	body.Set("grant_type", "authorization_code")

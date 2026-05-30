@@ -1,5 +1,14 @@
 (function () {
   const t = (k) => (window.I18N ? window.I18N.t(k) : k);
+
+  function pathPage(p) {
+    return window.trafficPaths ? window.trafficPaths.page(p) : p;
+  }
+
+  function pathApi(p) {
+    return window.trafficPaths ? window.trafficPaths.api(p) : p;
+  }
+
   const path = window.location.pathname;
   const isLogin = path.endsWith("/login.html") || path === "/login";
   const isAdminLogin = path.endsWith("/admin-login.html");
@@ -18,6 +27,7 @@
   }
 
   function userConsoleBase() {
+    if (window.trafficPaths) return window.trafficPaths.userConsoleBase();
     const m = document.querySelector('meta[name="traffic-ai-user-port"]');
     if (!m?.content) return "";
     const port = m.content.trim();
@@ -25,7 +35,7 @@
   }
 
   function redirectToLogin() {
-    window.location.replace("/login.html");
+    window.location.replace(pathPage("/login.html"));
   }
 
   /** 登录/注册/重置页：401 表示凭据错误等，应展示 message，不应整页跳转。 */
@@ -39,7 +49,7 @@
 
   async function fetchProfileAfterLogin() {
     const token = localStorage.getItem("accessToken");
-    const resp = await fetch("/account/profile", {
+    const resp = await fetch(pathApi("/account/profile"), {
       headers: { authorization: `Bearer ${token}` },
     });
     let json;
@@ -68,7 +78,7 @@
    * HTTP 401：清除 token；若当前不在公开认证页则跳转登录（如 token 过期）。
    */
   async function apiPost(url, body) {
-    const resp = await fetch(url, {
+    const resp = await fetch(pathApi(url), {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
@@ -162,7 +172,7 @@
       try {
         const json = await apiPost("/auth/login", { email, password });
         saveTokensFromData(json.data);
-        window.location.href = "/app.html";
+        window.location.href = pathPage("/app.html");
       } catch (err) {
         setMsg(err.message, false);
       }
@@ -184,7 +194,7 @@
           setMsg(t("auth.notAdminRole"), false);
           return;
         }
-        window.location.href = "/admin.html";
+        window.location.href = pathPage("/admin.html");
       } catch (err) {
         setMsg(err.message, false);
       }
@@ -226,7 +236,7 @@
       try {
         const json = await apiPost("/auth/register", payload);
         saveTokensFromData(json.data);
-        window.location.href = "/app.html";
+        window.location.href = pathPage("/app.html");
       } catch (err) {
         setMsg(err.message, false);
       }
@@ -266,7 +276,7 @@
         await apiPost("/auth/reset-password", { email, code, new_password });
         setMsg(t("auth.resetOk"), true);
         setTimeout(() => {
-          window.location.href = "/login.html";
+          window.location.href = pathPage("/login.html");
         }, 800);
       } catch (err) {
         setMsg(err.message, false);

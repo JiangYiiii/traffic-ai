@@ -1,6 +1,6 @@
 // Package api 控制面路由组装：用户平面与管理平面分端口；共享认证与业务依赖。
-// @ai_doc_flow 用户平面: /auth/* + /account/* + /me/* + 用户控制台静态资源
-// @ai_doc_flow 管理平面: /auth/* + /account/* + /admin/* + 管理后台静态资源
+// @ai_doc_flow 用户平面: {control_path_prefix}/auth/* + /account/* + /me/* + 用户控制台静态资源
+// @ai_doc_flow 管理平面: {control_path_prefix}/auth/* + /account/* + /admin/* + 管理后台静态资源
 package api
 
 import (
@@ -8,6 +8,7 @@ import (
 	"embed"
 	"io/fs"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
@@ -26,17 +27,14 @@ func NewUserRouter(cfg *config.Config, db *sql.DB, rdb *redis.Client) http.Handl
 	r.Use(httputil.RequestIDMiddleware())
 	r.Use(corsMiddleware())
 
-	r.GET("/healthz", func(c *gin.Context) { c.String(200, "ok") })
-	r.GET("/readyz", readyzHandler(db, rdb))
-
+	prefix := cfg.Server.NormalizedControlPathPrefix()
 	p := newControlPlane(cfg, db, rdb)
-	p.registerUserAPI(r)
-
-	sub, _ := fs.Sub(staticFS, "static")
-	staticH := newScopedStaticHandler(sub, staticScopeUser)
-	r.GET("/", func(c *gin.Context) { c.Redirect(http.StatusFound, "/app.html") })
-	r.GET("/docs", func(c *gin.Context) { c.Redirect(http.StatusFound, "/docs.html") })
-	r.NoRoute(gin.WrapH(staticH))
+	mountControlRoutes(r, cfg, db, rdb, prefix, p, mountOptions{
+		scope:        staticScopeUser,
+		indexTarget:  "/app.html",
+		registerAPI:  p.registerUserAPI,
+	})
+	mountRootRedirect(r, prefix, "/app.html")
 
 	return r
 }
@@ -48,18 +46,17 @@ func NewUnifiedControlRouter(cfg *config.Config, db *sql.DB, rdb *redis.Client) 
 	r.Use(httputil.RequestIDMiddleware())
 	r.Use(corsMiddleware())
 
-	r.GET("/healthz", func(c *gin.Context) { c.String(200, "ok") })
-	r.GET("/readyz", readyzHandler(db, rdb))
-
+	prefix := cfg.Server.NormalizedControlPathPrefix()
 	p := newControlPlane(cfg, db, rdb)
-	p.registerUserAPI(r)
-	p.registerAdminAPI(r)
-
-	sub, _ := fs.Sub(staticFS, "static")
-	staticH := newScopedStaticHandler(sub, staticScopeUnified)
-	r.GET("/", func(c *gin.Context) { c.Redirect(http.StatusFound, "/login.html") })
-	r.GET("/docs", func(c *gin.Context) { c.Redirect(http.StatusFound, "/docs.html") })
-	r.NoRoute(gin.WrapH(staticH))
+	mountControlRoutes(r, cfg, db, rdb, prefix, p, mountOptions{
+		scope:       staticScopeUnified,
+		indexTarget: "/login.html",
+		registerAPI: func(g *gin.RouterGroup) {
+			p.registerUserAPI(g)
+			p.registerAdminAPI(g)
+		},
+	})
+	mountRootRedirect(r, prefix, "/login.html")
 
 	return r
 }
@@ -71,18 +68,56 @@ func NewAdminRouter(cfg *config.Config, db *sql.DB, rdb *redis.Client) http.Hand
 	r.Use(httputil.RequestIDMiddleware())
 	r.Use(corsMiddleware())
 
-	r.GET("/healthz", func(c *gin.Context) { c.String(200, "ok") })
-	r.GET("/readyz", readyzHandler(db, rdb))
-
+	prefix := cfg.Server.NormalizedControlPathPrefix()
 	p := newControlPlane(cfg, db, rdb)
-	p.registerAdminAPI(r)
-
-	sub, _ := fs.Sub(staticFS, "static")
-	staticH := newScopedStaticHandler(sub, staticScopeAdmin)
-	r.GET("/", func(c *gin.Context) { c.Redirect(http.StatusFound, "/admin-login.html") })
-	r.NoRoute(gin.WrapH(staticH))
+	mountControlRoutes(r, cfg, db, rdb, prefix, p, mountOptions{
+		scope:       staticScopeAdmin,
+		indexTarget: "/admin-login.html",
+		registerAPI: p.registerAdminAPI,
+	})
+	mountRootRedirect(r, prefix, "/admin-login.html")
 
 	return r
+}
+
+type mountOptions struct {
+	scope       staticScope
+	indexTarget string
+	registerAPI func(*gin.RouterGroup)
+}
+
+func mountControlRoutes(r *gin.Engine, cfg *config.Config, db *sql.DB, rdb *redis.Client, prefix string, p *controlPlane, opts mountOptions) {
+	g := r.Group(prefix)
+
+	g.GET("/healthz", func(c *gin.Context) { c.String(200, "ok") })
+	g.GET("/readyz", readyzHandler(db, rdb))
+	g.GET("/traffic-config.js", trafficConfigHandler(cfg))
+
+	opts.registerAPI(g)
+
+	sub, _ := fs.Sub(staticFS, "static")
+	staticH := newScopedStaticHandler(sub, opts.scope)
+
+	g.GET("/", redirectWithPrefix(prefix, opts.indexTarget))
+	g.GET("/docs", redirectWithPrefix(prefix, "/docs.html"))
+	g.GET("/*filepath", staticCatchAll(staticH))
+}
+
+func staticCatchAll(staticH http.Handler) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		fp := strings.TrimPrefix(c.Param("filepath"), "/")
+		if fp == "" {
+			c.Status(http.StatusNotFound)
+			return
+		}
+		if strings.Contains(fp, "..") {
+			c.Status(http.StatusNotFound)
+			return
+		}
+		req := c.Request.Clone(c.Request.Context())
+		req.URL.Path = "/" + fp
+		staticH.ServeHTTP(c.Writer, req)
+	}
 }
 
 func readyzHandler(db *sql.DB, rdb *redis.Client) gin.HandlerFunc {

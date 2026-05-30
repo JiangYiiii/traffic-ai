@@ -1,7 +1,16 @@
 (function () {
   const t = (k) => (window.I18N ? window.I18N.t(k) : k);
 
+  function pathPage(p) {
+    return window.trafficPaths ? window.trafficPaths.page(p) : p;
+  }
+
+  function pathApi(p) {
+    return window.trafficPaths ? window.trafficPaths.api(p) : p;
+  }
+
   function userConsoleBase() {
+    if (window.trafficPaths) return window.trafficPaths.userConsoleBase();
     const m = document.querySelector('meta[name="traffic-ai-user-port"]');
     if (!m?.content) return "";
     return `${window.location.protocol}//${window.location.hostname}:${m.content.trim()}`;
@@ -42,10 +51,10 @@
   async function api(path, options = {}) {
     const token = localStorage.getItem("accessToken");
     if (!token) {
-      window.location.href = "/admin-login.html";
+      window.location.href = pathPage("/admin-login.html");
       return null;
     }
-    const resp = await fetch(path, {
+    const resp = await fetch(pathApi(path), {
       ...options,
       headers: {
         "content-type": "application/json",
@@ -55,7 +64,7 @@
     });
     if (resp.status === 401) {
       localStorage.removeItem("accessToken");
-      window.location.href = "/admin-login.html";
+      window.location.href = pathPage("/admin-login.html");
       return null;
     }
     const body = await resp.json().catch(() => ({}));
@@ -2011,7 +2020,7 @@
         denied.classList.remove("d-none");
         setTimeout(() => {
           const base = userConsoleBase();
-          window.location.href = base ? `${base}/app.html` : "/app.html";
+          window.location.href = base ? `${base}/app.html` : pathPage("/app.html");
         }, 2000);
         return;
       }
@@ -2057,12 +2066,12 @@
 
     document.getElementById("adminLogoutBtn")?.addEventListener("click", () => {
       localStorage.removeItem("accessToken");
-      window.location.href = "/admin-login.html";
+      window.location.href = pathPage("/admin-login.html");
     });
 
     const ubase = userConsoleBase();
     if (ubase) {
-      document.querySelectorAll('a[href="/app.html"]').forEach((a) => {
+      document.querySelectorAll('a[href="/app.html"], a[href*="app.html"]').forEach((a) => {
         a.href = `${ubase}/app.html`;
       });
     }

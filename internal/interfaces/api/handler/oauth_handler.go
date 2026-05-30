@@ -25,8 +25,8 @@ func (h *OAuthHandler) RegisterStart(group *gin.RouterGroup) {
 }
 
 // RegisterCallback 注册无需认证的回调端点（浏览器直接跳转，不带 JWT）。
-func (h *OAuthHandler) RegisterCallback(r *gin.Engine) {
-	r.GET("/admin/oauth/callback", h.HandleCallback)
+func (h *OAuthHandler) RegisterCallback(group *gin.RouterGroup) {
+	group.GET("/admin/oauth/callback", h.HandleCallback)
 }
 
 type startAuthReq struct {

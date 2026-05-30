@@ -1,10 +1,18 @@
 const t = (k) => (window.I18N ? window.I18N.t(k) : k);
 
+function pathPage(p) {
+  return window.trafficPaths ? window.trafficPaths.page(p) : p;
+}
+
+function pathApi(p) {
+  return window.trafficPaths ? window.trafficPaths.api(p) : p;
+}
+
 function getAccessToken() {
   return localStorage.getItem("accessToken");
 }
 
-if (!getAccessToken()) window.location.href = "/login.html";
+if (!getAccessToken()) window.location.href = pathPage("/login.html");
 
 let currentUserGroup = "default";
 let cachedProfile = null;
@@ -35,12 +43,20 @@ function renderPager({ infoId, prevId, nextId, state, pageSize }) {
 }
 
 function gatewayBase() {
+  if (window.trafficPaths) return window.trafficPaths.gatewayBase();
   return `${window.location.protocol}//${window.location.hostname}:8081`;
 }
 
 function adminConsoleHref() {
+  if (window.trafficPaths) {
+    if (window.trafficPaths.controlPath()) {
+      return window.trafficPaths.page("/admin.html");
+    }
+    const base = window.trafficPaths.adminConsoleBase();
+    if (base) return `${base}/admin.html`;
+  }
   const m = document.querySelector('meta[name="traffic-ai-admin-port"]');
-  if (!m?.content) return "/admin.html";
+  if (!m?.content) return pathPage("/admin.html");
   const port = m.content.trim();
   return `${window.location.protocol}//${window.location.hostname}:${port}/admin.html`;
 }
@@ -56,7 +72,7 @@ const TOKEN_EYE_SVG =
 
 async function api(path, options = {}) {
   const token = getAccessToken();
-  const resp = await fetch(path, {
+  const resp = await fetch(pathApi(path), {
     ...options,
     headers: {
       "content-type": "application/json",
@@ -66,7 +82,7 @@ async function api(path, options = {}) {
   });
   if (resp.status === 401) {
     localStorage.removeItem("accessToken");
-    window.location.href = "/login.html";
+    window.location.href = pathPage("/login.html");
     return null;
   }
   const body = await resp.json().catch(() => ({}));
@@ -1450,7 +1466,7 @@ async function init() {
 
   document.getElementById("logoutBtn").addEventListener("click", () => {
     localStorage.removeItem("accessToken");
-    window.location.href = "/login.html";
+    window.location.href = pathPage("/login.html");
   });
 
   document.getElementById("refreshBtn").addEventListener("click", () => refreshAll());

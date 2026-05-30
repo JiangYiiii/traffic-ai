@@ -2,7 +2,12 @@
   const t = (k) => (window.I18N ? window.I18N.t(k) : k);
   const accessToken = localStorage.getItem("accessToken");
 
+  function pathApi(p) {
+    return window.trafficPaths ? window.trafficPaths.api(p) : p;
+  }
+
   function gatewayBase() {
+    if (window.trafficPaths) return window.trafficPaths.gatewayBase();
     return `${window.location.protocol}//${window.location.hostname}:8081`;
   }
 
@@ -56,7 +61,7 @@
       return;
     }
     try {
-      const resp = await fetch("/me/tokens", {
+      const resp = await fetch(pathApi("/me/tokens"), {
         headers: { "content-type": "application/json", authorization: `Bearer ${accessToken}` },
       });
       const body = await resp.json().catch(() => ({}));
@@ -98,7 +103,7 @@
     try {
       let rows = [];
       if (accessToken) {
-        const resp = await fetch("/me/model-pricing", {
+        const resp = await fetch(pathApi("/me/model-pricing"), {
           headers: { "content-type": "application/json", authorization: `Bearer ${accessToken}` },
         });
         const body = await resp.json().catch(() => ({}));

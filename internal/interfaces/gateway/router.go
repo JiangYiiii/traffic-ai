@@ -31,9 +31,12 @@ func NewRouter(cfg *config.Config, db *sql.DB, rdb *redis.Client, metrics *Metri
 	r.Use(httputil.RequestIDMiddleware())
 	r.Use(CORSMiddleware())
 
-	r.GET("/healthz", func(c *gin.Context) { c.String(200, "ok") })
-	r.GET("/metrics", gin.WrapH(metrics.Handler()))
-	r.GET("/readyz", readyzHandler(db, rdb))
+	prefix := cfg.Server.NormalizedGatewayPathPrefix()
+	g := r.Group(prefix)
+
+	g.GET("/healthz", func(c *gin.Context) { c.String(200, "ok") })
+	g.GET("/metrics", gin.WrapH(metrics.Handler()))
+	g.GET("/readyz", readyzHandler(db, rdb))
 
 	// ---- 组装依赖 ----
 	tokenRepo := mysqlrepo.NewTokenRepo(db)
@@ -71,7 +74,7 @@ func NewRouter(cfg *config.Config, db *sql.DB, rdb *redis.Client, metrics *Metri
 
 	authMW := AuthMiddleware(uc)
 
-	v1 := r.Group("/v1")
+	v1 := g.Group("/v1")
 	v1.Use(authMW)
 	{
 		v1.GET("/models", h.ListModels)
@@ -89,7 +92,7 @@ func NewRouter(cfg *config.Config, db *sql.DB, rdb *redis.Client, metrics *Metri
 		v1.POST("/messages", h.AnthropicMessages)
 	}
 
-	v1beta := r.Group("/v1beta")
+	v1beta := g.Group("/v1beta")
 	v1beta.Use(authMW)
 	{
 		v1beta.POST("/models/*modelAction", h.GeminiGenerateContent)
