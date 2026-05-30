@@ -45,6 +45,9 @@ func main() {
 		logger.L.Fatalf("init redis: %v", err)
 	}
 	defer rdb.Close()
+	if redispkg.SkipCheck() {
+		logger.L.Warnw("TRAFFIC_REDIS_SKIP_CHECK=1: redis startup ping and /readyz redis check disabled; use GET /debug/redis for diagnostics")
+	}
 
 	metrics := gateway.NewMetrics()
 

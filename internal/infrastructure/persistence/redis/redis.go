@@ -16,6 +16,9 @@ func NewClient(cfg *config.RedisConfig) (*redis.Client, error) {
 		DB:       cfg.DB,
 		PoolSize: cfg.PoolSize,
 	})
+	if SkipCheck() {
+		return client, nil
+	}
 	if err := client.Ping(context.Background()).Err(); err != nil {
 		return nil, fmt.Errorf("ping redis: %w", err)
 	}

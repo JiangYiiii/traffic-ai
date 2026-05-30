@@ -14,6 +14,7 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"github.com/trailyai/traffic-ai/internal/infrastructure/config"
+	"github.com/trailyai/traffic-ai/internal/interfaces/health"
 	"github.com/trailyai/traffic-ai/pkg/httputil"
 )
 
@@ -90,7 +91,8 @@ func mountControlRoutes(r *gin.Engine, cfg *config.Config, db *sql.DB, rdb *redi
 	g := r.Group(prefix)
 
 	g.GET("/healthz", func(c *gin.Context) { c.String(200, "ok") })
-	g.GET("/readyz", readyzHandler(db, rdb))
+	g.GET("/readyz", health.ReadyzHandler(db, rdb))
+	health.RegisterDebugRoutes(g, &cfg.Redis, rdb)
 	g.GET("/traffic-config.js", trafficConfigHandler(cfg))
 
 	opts.registerAPI(g)
@@ -117,20 +119,6 @@ func staticCatchAll(staticH http.Handler) gin.HandlerFunc {
 		req := c.Request.Clone(c.Request.Context())
 		req.URL.Path = "/" + fp
 		staticH.ServeHTTP(c.Writer, req)
-	}
-}
-
-func readyzHandler(db *sql.DB, rdb *redis.Client) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		if err := db.Ping(); err != nil {
-			c.JSON(503, gin.H{"status": "mysql not ready", "error": err.Error()})
-			return
-		}
-		if err := rdb.Ping(c.Request.Context()).Err(); err != nil {
-			c.JSON(503, gin.H{"status": "redis not ready", "error": err.Error()})
-			return
-		}
-		c.JSON(200, gin.H{"status": "ready"})
 	}
 }
 

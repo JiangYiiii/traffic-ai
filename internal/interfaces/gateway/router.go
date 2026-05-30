@@ -3,10 +3,8 @@
 package gateway
 
 import (
-	"context"
 	"database/sql"
 	"net/http"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
@@ -20,6 +18,7 @@ import (
 	"github.com/trailyai/traffic-ai/internal/infrastructure/httpclient"
 	mysqlrepo "github.com/trailyai/traffic-ai/internal/infrastructure/persistence/mysql"
 	redisinfra "github.com/trailyai/traffic-ai/internal/infrastructure/persistence/redis"
+	"github.com/trailyai/traffic-ai/internal/interfaces/health"
 	"github.com/trailyai/traffic-ai/pkg/httputil"
 )
 
@@ -36,7 +35,8 @@ func NewRouter(cfg *config.Config, db *sql.DB, rdb *redis.Client, metrics *Metri
 
 	g.GET("/healthz", func(c *gin.Context) { c.String(200, "ok") })
 	g.GET("/metrics", gin.WrapH(metrics.Handler()))
-	g.GET("/readyz", readyzHandler(db, rdb))
+	g.GET("/readyz", health.ReadyzHandler(db, rdb))
+	health.RegisterDebugRoutes(g, &cfg.Redis, rdb)
 
 	// ---- 组装依赖 ----
 	tokenRepo := mysqlrepo.NewTokenRepo(db)
@@ -99,26 +99,4 @@ func NewRouter(cfg *config.Config, db *sql.DB, rdb *redis.Client, metrics *Metri
 	}
 
 	return r
-}
-
-// readyzHandler 深度健康检查：并行 ping DB 和 Redis，30ms 硬超时。
-// 任一失败返回 503，但会**继续检查另一个**以便运维一眼看出两边状态。
-func readyzHandler(db *sql.DB, rdb *redis.Client) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Millisecond)
-		defer cancel()
-
-		result := gin.H{"db": "ok", "redis": "ok"}
-		httpStatus := http.StatusOK
-
-		if err := db.PingContext(ctx); err != nil {
-			result["db"] = "fail: " + err.Error()
-			httpStatus = http.StatusServiceUnavailable
-		}
-		if err := rdb.Ping(ctx).Err(); err != nil {
-			result["redis"] = "fail: " + err.Error()
-			httpStatus = http.StatusServiceUnavailable
-		}
-		c.JSON(httpStatus, result)
-	}
 }
