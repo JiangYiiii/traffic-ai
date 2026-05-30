@@ -99,22 +99,36 @@ func mountControlRoutes(r *gin.Engine, cfg *config.Config, db *sql.DB, rdb *redi
 
 	g.GET("/", redirectWithPrefix(prefix, opts.indexTarget))
 	g.GET("/docs", redirectWithPrefix(prefix, "/docs.html"))
-	g.GET("/*filepath", staticCatchAll(staticH))
+
+	r.NoRoute(staticNoRouteHandler(prefix, staticH))
 }
 
-func staticCatchAll(staticH http.Handler) gin.HandlerFunc {
+func staticNoRouteHandler(prefix string, staticH http.Handler) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		fp := strings.TrimPrefix(c.Param("filepath"), "/")
-		if fp == "" {
+		if c.Request.Method != http.MethodGet && c.Request.Method != http.MethodHead {
 			c.Status(http.StatusNotFound)
 			return
 		}
-		if strings.Contains(fp, "..") {
+
+		path := c.Request.URL.Path
+		if prefix != "" {
+			if path != prefix && !strings.HasPrefix(path, prefix+"/") {
+				c.Status(http.StatusNotFound)
+				return
+			}
+			path = strings.TrimPrefix(path, prefix)
+		}
+		if path == "" || path == "/" {
 			c.Status(http.StatusNotFound)
 			return
 		}
+		if strings.Contains(path, "..") {
+			c.Status(http.StatusNotFound)
+			return
+		}
+
 		req := c.Request.Clone(c.Request.Context())
-		req.URL.Path = "/" + fp
+		req.URL.Path = path
 		staticH.ServeHTTP(c.Writer, req)
 	}
 }
