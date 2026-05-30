@@ -304,6 +304,7 @@ func overrideFromEnv(cfg *Config) {
 			cfg.Server.GatewayPort = p
 		}
 	}
+	applyPlatformPortFallback(&cfg.Server)
 	if v := os.Getenv("CONTROL_PATH_PREFIX"); v != "" {
 		cfg.Server.ControlPathPrefix = v
 	}
